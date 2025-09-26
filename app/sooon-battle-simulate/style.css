@@ -813,18 +813,17 @@ progress {
 
 /* ==================== 底部声明样式 ==================== */
 .footer-attribution {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  padding: calc(var(--spacing-md) * var(--scale-factor)) calc(var(--spacing-lg) * var(--scale-factor));
+  position: relative;
   text-align: center;
   z-index: 5;
   
   font-size: calc(var(--font-size-small) * var(--scale-factor));
   color: #666;
-  margin: 0;
+  margin: calc(var(--spacing-lg) * var(--scale-factor)) 0 0 0;
+  padding: calc(var(--spacing-md) * var(--scale-factor));
   line-height: 1.4;
+  background: rgba(255, 255, 255, 0.9);
+  border-top: 1px solid #e0e0e0;
 }
 
 
@@ -864,7 +863,4 @@ a {
     font-size: calc(var(--font-size-large) * var(--scale-factor) * 0.9);
   }
   
-  .footer-attribution {
-    padding: calc(var(--spacing-sm) * var(--scale-factor)) calc(var(--spacing-md) * var(--scale-factor));
-  }
 }
