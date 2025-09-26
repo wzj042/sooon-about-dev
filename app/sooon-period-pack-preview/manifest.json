@@ -1,0 +1,41 @@
+{
+  "name": "参考源周期包预览",
+  "short_name": "周期包预览",
+  "description": "用于预览参考源周期包内容的PWA应用",
+  "start_url": "/app/preview-ref-pack/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#2F92E7",
+  "orientation": "portrait",
+  "scope": "/app/preview-ref-pack/",
+  "icons": [
+    {
+      "src": "icon-32.png",
+      "sizes": "32x32",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-64.png",
+      "sizes": "64x64",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["productivity", "utilities"],
+  "lang": "zh-CN",
+  "prefer_related_applications": false,
+  "offline_enabled": true
+}

@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>素问抢答模拟</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <script src="game-state-manager.js"></script>
+  <script src="animation-manager.js"></script>
+  <script src="ui-controller.js"></script>
+  
+  <!-- 主游戏容器 -->
+  <div class="quiz-container">
+    <!-- 加分动画容器：用于显示分数增加时的飞行动画效果 -->
+    <div class="score-animation-container" id="score-animation-container"></div>
+    
+    <!-- 顶部状态栏：显示玩家信息、计时器、对手信息 -->
+    <div class="header">
+      <!-- 玩家信息区域 -->
+      <div class="player-info">
+        <div class="avatar">You</div>
+        <div class="player-score">0</div>
+      </div>
+      
+      <!-- 计时器区域：显示当前题目剩余时间 -->
+      <div class="timer-container">
+        <div class="timer-circle">
+          <!-- 计时器进度圆环 -->
+          <div class="timer-progress"></div>
+          <!-- 计时器数字显示 -->
+          <span style="position: relative; z-index: 1;">0</span>
+        </div>
+      </div>
+      
+      <!-- 对手信息区域 -->
+      <div class="opponent-info">
+        <div class="opponent-score">
+          <div class="score-number">0</div>
+        </div>
+        <div class="opponent-avatar"></div>
+      </div>
+    </div>
+
+    <!-- 轮次提示文本：显示当前题目轮次或游戏状态 -->
+    <div class="rank-text" id="rank-text"></div>
+    
+    <!-- 题目区域：包含题目内容、选项、进度条 -->
+    <div class="question-section">
+      <!-- 左侧进度条：显示玩家当前分数进度 -->
+      <div class="progress-bar left-progress">
+        <div class="progress-fill" id="left-progress-fill"></div>
+      </div>
+      
+      <!-- 题目内容区域 -->
+      <div class="question-content">
+        <!-- 题目文本 -->
+        <div class="question-text">
+          当一个人认为"人人都在欺负我"时,最需要反思的是什么?
+        </div>
+        
+        <!-- 选项容器：包含4个答题选项 -->
+        <div class="options-container">
+          <!-- 选项1：包含选项文本和对手结果图标 -->
+          <div class="option" data-option="1">
+            <div class="option-text">社会缺乏对弱者的保护机制</div>
+            <div class="opponent-result" data-option="1"></div>
+          </div>
+          
+          <!-- 选项2 -->
+          <div class="option" data-option="2">
+            <div class="option-text">是否侵犯了ta人的合法自由</div>
+            <div class="opponent-result" data-option="2"></div>
+          </div>
+          
+          <!-- 选项3 -->
+          <div class="option" data-option="3">
+            <div class="option-text">自身实力弱小,无法形成有效威慑</div>
+            <div class="opponent-result" data-option="3"></div>
+          </div>
+          
+          <!-- 选项4 -->
+          <div class="option" data-option="4">
+            <div class="option-text">ta人普遍存在的敌意</div>
+            <div class="opponent-result" data-option="4"></div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- 右侧进度条：显示对手当前分数进度 -->
+      <div class="progress-bar right-progress">
+        <div class="progress-fill" id="right-progress-fill"></div>
+      </div>
+    </div>
+    <!-- 结束界面：显示胜负颜文字与继续挑战按钮 -->
+    <div class="end-screen" id="end-screen" style="display: none;">
+      <div class="end-title" id="end-title">平局</div>
+      <div class="end-emoji" id="end-emoji">(-__-°)</div>
+      <button class="cta-button primary" id="continue-button">继续挑战</button>
+    </div>
+    
+  </div>
+
+    <!-- 底部题库来源声明 -->
+    <div class="footer-attribution">
+      <p>题库来源：<a href="https://sooon.ai/" target="_blank">素问</a>，详见
+        <a href="about.html" >关于</a>
+      </p>
+    </div>
+  <script>
+    /**
+     * 答题对战游戏主脚本
+     * 负责初始化游戏组件和协调各模块之间的交互
+     */
+    
+    // 全局变量：存储游戏核心组件实例
+    let gameStateManager;  // 状态管理器实例
+    let uiController;      // UI控制器实例
+
+    /**
+     * 选项动画完成事件处理
+     * 确保选项在CSS动画完成后正确显示
+     */
+    document.querySelectorAll('.option').forEach(option => {
+      option.addEventListener('animationend', function() {
+        this.classList.add('animate-in');
+      });
+    });
+
+    /**
+     * 页面加载完成事件处理
+     * 初始化游戏组件并开始游戏流程
+     */
+    document.addEventListener('DOMContentLoaded', function() {
+      console.log('页面加载完成，开始初始化游戏...');
+      
+      // 1. 创建状态管理器实例
+      // 负责管理游戏的所有状态：分数、轮次、题目、计时器等
+      gameStateManager = new GameStateManager();
+      
+      // 2. 创建UI控制器实例
+      // 负责连接状态管理器和DOM操作，处理所有UI更新
+      uiController = new UIController(gameStateManager);
+      
+      // 3. 设置初始游戏状态
+      // 每次进入页面都视为一局新游戏，重置所有分数
+      const initialPlayerScore = 0;    // 玩家初始分数
+      const initialOpponentScore = 0;  // 对手初始分数
+      const initialTimeLeft = 150;     // 初始倒计时（秒）
+      
+      // 更新状态管理器中的初始状态
+      gameStateManager.updateState({
+        playerScore: initialPlayerScore,
+        opponentScore: initialOpponentScore,
+        timeLeft: initialTimeLeft
+      });
+
+      // 3.1 配置对手参数（头像、AI准确率、选择速度）
+      // 示例：70%正确率，0.4s~1.2s 随机作答延迟，头像为emoji
+      gameStateManager.configureOpponent({
+        avatar: '🤖',
+        ai: { accuracy: 0.7, speedMsRange: [1280, 2900] }
+      });
+      
+      // 4. 立即更新UI显示
+      // 确保页面加载时显示正确的初始状态
+      setTimeout(() => {
+        uiController.updatePlayerScore(initialPlayerScore);
+        uiController.updateOpponentScore(initialOpponentScore);
+        
+        uiController.updateTimer(initialTimeLeft);
+        // 同步一次头像显示
+        uiController.updateOpponentAvatar(gameStateManager.getState('opponent')?.avatar);
+        console.log('UI初始化完成，倒计时设置为', initialTimeLeft, '秒');
+      }, 100);
+        
+      // 5. 开始新一局游戏
+      // 延迟500ms开始游戏，确保所有组件都已正确初始化
+      setTimeout(() => {
+        gameStateManager.startNewGame();
+        console.log('游戏开始！');
+      }, 500);
+        
+      console.log('游戏初始化完成');
+
+      // 暴露调试函数到全局：window.debugSettle(0|1|2)
+      window.debugSettle = function(mode){
+        if (!gameStateManager) return;
+        if (typeof gameStateManager.debugSettle === 'function') {
+          gameStateManager.debugSettle(Number(mode));
+        }
+      };
+      // 控制台输出大提示说明可设置的mode
+      console.log('可设置的mode: 0-平局, 1-玩家胜, 2-对手胜');
+      console.log('方法：debugSettle(0|1|2)');
+    });
+    
+    /**
+     * 页面卸载事件处理
+     * 清理资源，防止内存泄漏
+     */
+    window.addEventListener('beforeunload', function() {
+      console.log('页面即将卸载，开始清理资源...');
+      
+      // 清理状态管理器
+      if (gameStateManager) {
+        gameStateManager.destroy();
+        console.log('状态管理器已清理');
+      }
+      
+      // 清理UI控制器
+      if (uiController) {
+        uiController.destroy();
+        console.log('UI控制器已清理');
+      }
+      
+      console.log('资源清理完成');
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,21 @@
+文件名格式：ps_YYYY-MM-DD.json
+
+结构：包含文章、来源、修订记录的 json 数组
+
+单文章结构：
+
+- id：文章id
+- title: 文章 hash 标题，一般显示为 `#${title}#`
+- question: 文章问题，作为文章的副标题
+- content: 文章文本，使用 `\n\n` 分段
+- url: 文章原始来源，含爱发电或知乎链接
+- publishedAt: 发布时间，如`2025-09-12T10:58:24.675Z` 
+- updatedAt: 更新时间
+- proofread: 修订内容数组
+
+修订结构：
+
+- id: 修订id
+- sourceId: 来源文章id
+- corrected: 来源文章修订后内容
+- original: 来源文章原始内容

@@ -1,0 +1,1210 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>素问今日聚焦标签分析</title>
+    <meta
+      name="viewport"
+      content="width=device-width,initial-scale=1.0,user-scalable=no"
+    />
+
+    <!-- ECharts 核心库 -->
+    <script src="https://cdn.jsdelivr.net/npm/echarts/dist/echarts.min.js"></script>
+    <!-- ECharts 词云扩展 -->
+    <script src="https://cdn.jsdelivr.net/npm/echarts-wordcloud/dist/echarts-wordcloud.min.js"></script>
+    <!-- PapaParse CSV 解析库 -->
+    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.2/papaparse.min.js"></script>
+
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+        background-color: #f5f5f5;
+        color: #333;
+      }
+      h1 {
+        text-align: center;
+        margin: 16px 0;
+        font-size: 20px;
+      }
+      .container {
+        width: 100%;
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 16px;
+      }
+
+      /* ======= 配置面板 ======= */
+      .config-panel {
+        position: fixed;
+        right: 16px;
+        top: 16px;
+        width: 220px;
+        background: #fff;
+        border-radius: 8px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+        z-index: 999;
+        /* 过渡效果示意，可自行调优 */
+        transition: max-height 0.3s ease-in-out, padding 0.3s ease-in-out;
+        overflow: hidden;
+      }
+      /* 折叠时 max-height: 0; 无内边距 */
+      .config-panel.collapsed {
+        width: 0;
+        height: 0;
+        overflow: hidden;
+        padding: 0;
+      }
+
+      .config-panel h2 {
+        font-size: 16px;
+        margin: 0;
+        padding: 12px;
+        border-bottom: 1px solid #ddd;
+        border-radius: 8px 8px 0 0;
+        cursor: pointer;
+      }
+
+      .config-content {
+        padding: 12px;
+      }
+
+      .collapse-btn,
+      .expand-btn {
+        background: #fff;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        padding: 4px 8px;
+        cursor: pointer;
+        font-size: 14px;
+        outline: none;
+        transition: background 0.2s;
+      }
+      .collapse-btn:hover,
+      .expand-btn:hover {
+        background: #f0f0f0;
+      }
+
+      /* 展开按钮——小方块或小按钮 */
+      .expand-btn {
+        position: fixed;
+        right: 16px;
+        top: 16px;
+        display: none; /* 初始不显示 */
+        z-index: 1000;
+      }
+      .config-row {
+        display: flex;
+        flex-direction: column;
+        margin-bottom: 8px;
+      }
+      .config-row label {
+        font-size: 14px;
+        margin-bottom: 2px;
+      }
+      .config-row input {
+        padding: 4px 6px;
+        font-size: 14px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        outline: none;
+      }
+      .config-row input[type="date"] {
+        width: 100%;
+      }
+      .config-row input[type="number"] {
+        width: 100%;
+      }
+
+      /* 按钮统一样式 */
+      .button-link {
+        display: inline-block;
+        width: 100%; /* 占满配置面板宽度 */
+        font-size: 14px;
+        text-decoration: none;
+        color: #0066ff;
+        border: 1px solid #0066ff;
+        border-radius: 4px;
+        padding: 6px 8px;
+        text-align: center;
+        margin-top: 8px;
+        transition: 0.2s;
+        box-sizing: border-box;
+      }
+      .button-link:hover {
+        background: #0066ff;
+        color: #fff;
+      }
+
+      /* ======= 推广链接样式 ======= */
+      .promotion {
+        margin-top: 12px;
+        border-top: 1px solid #ddd;
+        padding-top: 8px;
+      }
+      .promo-badge {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-bottom: 6px;
+        text-decoration: none;
+        color: #333;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        padding: 4px 6px;
+        font-size: 14px;
+        transition: 0.2s;
+      }
+      .promo-badge:hover {
+        background: #fafafa;
+      }
+      .promo-badge img {
+        width: 20px;
+        height: 20px;
+        object-fit: contain;
+      }
+
+      /* ======= 概览卡片 ======= */
+      .summary-card {
+        background: #fff;
+        border-radius: 8px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        padding: 16px;
+        margin-bottom: 16px;
+        position: relative;
+      }
+      .summary-card h2 {
+        margin-bottom: 8px;
+        font-size: 16px;
+      }
+      .date-range-hint {
+        font-size: 13px;
+        color: #999;
+        margin-bottom: 12px;
+      }
+      .summary-info {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+      }
+      .info-item {
+        flex: 1;
+        min-width: 150px;
+        background: #fafafa;
+        border-radius: 4px;
+        padding: 8px;
+      }
+      .info-item h3 {
+        font-size: 14px;
+        margin-bottom: 4px;
+      }
+      .info-item p {
+        font-size: 14px;
+        margin: 0;
+      }
+
+      /* ======= 图表网格布局 ======= */
+      .charts-container {
+        background: #fff;
+        border-radius: 8px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        padding: 16px;
+        display: grid;
+        grid-template-columns: 1fr 1fr; /* 两列并排 */
+        grid-gap: 16px;
+        margin-bottom: 16px;
+      }
+      .chart-box {
+        position: relative;
+        width: 100%;
+        height: 400px;
+      }
+      .loading-tip {
+        position: absolute;
+        width: 100%;
+        text-align: center;
+        top: 50%;
+        transform: translateY(-50%);
+        color: #888;
+      }
+
+      /* ======= 文章列表(最多/最少标签) 并列显示 ======= */
+      .articles-section {
+        background: #fff;
+        border-radius: 8px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        padding: 16px;
+        margin-bottom: 16px;
+      }
+      .articles-section h2 {
+        font-size: 16px;
+        margin-bottom: 12px;
+      }
+      .article-lists-wrapper {
+        display: flex;
+        gap: 16px;
+      }
+      .article-list-col {
+        flex: 1;
+        background: #fafafa;
+        padding: 8px;
+        border-radius: 4px;
+      }
+      .article-list-col h3 {
+        margin-top: 0;
+        margin-bottom: 4px;
+        font-size: 14px;
+      }
+      .article-list-col p {
+        margin: 4px 0;
+        line-height: 1.4;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- 配置面板可折叠 -->
+    <div class="config-panel" id="config-panel">
+      <!-- 折叠按钮（在展开状态下可见） -->
+      <button class="collapse-btn" id="collapse-btn" onclick="collapsePanel()">
+        收起
+      </button>
+      <!-- 面板标题，点击切换折叠 -->
+      <h2>筛选与参数</h2>
+
+      <!-- 内部内容容器 -->
+      <div class="config-content" id="panel-content">
+        <div class="config-row">
+          <label for="start-date">开始日期</label>
+          <input type="date" id="start-date" />
+        </div>
+        <div class="config-row">
+          <label for="end-date">结束日期</label>
+          <input type="date" id="end-date" />
+        </div>
+        <div class="config-row">
+          <label for="top-k">柱状图 & 饼图 Top K</label>
+          <input type="number" id="top-k" min="1" value="10" />
+        </div>
+
+        <!-- 下载 CSV 按钮（宽度占满） -->
+        <a id="download-link" class="button-link" href="#" download
+          >下载数据集</a
+        >
+        <!-- 重置按钮 -->
+        <a id="reset-filter" class="button-link" href="javascript:void(0)"
+          >重置筛选</a
+        >
+
+        <div class="promotion">
+          <a
+            class="promo-badge"
+            href="https://github.com/wzj042/sooon-ai-about"
+            target="_blank"
+            title="GitHub 仓库"
+          >
+            <img
+              src="https://img.icons8.com/ios-filled/50/000000/github.png"
+              alt="GitHub"
+            />
+            <span>获取项目源码</span>
+          </a>
+        </div>
+      </div>
+    </div>
+    <!-- 当折叠后，仅显示这个“小按钮”悬浮在右侧，用于恢复展开 -->
+    <button class="expand-btn" id="expand-btn" onclick="expandPanel()">
+      配置
+    </button>
+    <h1>素问今日聚焦标签分析</h1>
+    <div class="container">
+      <!-- 概览卡片 -->
+      <div class="summary-card" id="summary-card">
+        <h2>数据概览</h2>
+        <div class="date-range-hint" id="date-range-hint"></div>
+        <div class="summary-info"></div>
+      </div>
+
+      <!-- 多图表网格布局 -->
+      <div class="charts-container">
+        <div class="chart-box" id="bar-chart">
+          <div class="loading-tip" id="bar-loading">加载中...</div>
+        </div>
+        <div class="chart-box" id="pie-chart">
+          <div class="loading-tip" id="pie-loading">加载中...</div>
+        </div>
+        <div class="chart-box" id="line-chart">
+          <div class="loading-tip" id="line-loading">加载中...</div>
+        </div>
+        <div class="chart-box" id="wordcloud-chart">
+          <div class="loading-tip" id="wc-loading">加载中...</div>
+        </div>
+        <!-- 新增一个力导向图，用于演示增量节点生长 -->
+        <div class="chart-box" id="growth-graph-incremental">
+          <div class="loading-tip" id="growth-loading-incremental">
+            加载中...
+          </div>
+        </div>
+
+        <div class="chart-box" id="heatmap-chart">
+          <div class="loading-tip" id="heatmap-loading">加载中...</div>
+        </div>
+      </div>
+
+      <div class="articles-section" id="extreme-articles"></div>
+    </div>
+
+    <script>
+      let panelIsCollapsed = false;
+
+      function collapsePanel() {
+        const panel = document.getElementById("config-panel");
+        const expandBtn = document.getElementById("expand-btn");
+
+        // 标记折叠
+        panelIsCollapsed = true;
+        // 给面板加一个 .collapsed 类
+        panel.classList.add("collapsed");
+        // 隐藏“折叠”按钮自身
+        document.getElementById("collapse-btn").style.display = "none";
+        // 显示“配置”按钮
+        expandBtn.style.display = "block";
+      }
+
+      function expandPanel() {
+        const panel = document.getElementById("config-panel");
+        const expandBtn = document.getElementById("expand-btn");
+
+        // 取消折叠
+        panelIsCollapsed = false;
+        panel.classList.remove("collapsed");
+        // 显示“折叠”按钮
+        document.getElementById("collapse-btn").style.display = "inline-block";
+        // 隐藏“配置”按钮
+        expandBtn.style.display = "none";
+      }
+
+      // 监听标题点击
+      document.addEventListener("DOMContentLoaded", () => {
+        panelIsCollapsed = true;
+        document.getElementById("config-panel").classList.add("collapsed");
+        document.getElementById("expand-btn").style.display = "block";
+        
+      });
+
+      // ===== 下方是原本的分析逻辑，保持不变 =====
+
+      const csvPath = "assets/articles.csv";
+      let rawData = [];
+      let startDate = null;
+      let endDate = null;
+      let topK = 10;
+
+      let defaultEarliest = null;
+      let defaultLatest = null;
+      let defaultTopK = 10;
+
+      // 将新参数也合并进“全局”或“半全局”变量
+      let repulsionValue = 600;
+      let edgeThreshold = 2;
+      let heatmapColorScheme = "viridis";
+
+      function applyGraphParams() {
+        repulsionValue =
+          parseInt(document.getElementById("repulsion-input").value, 10) || 200;
+        edgeThreshold =
+          parseInt(document.getElementById("edge-threshold-input").value, 10) ||
+          2;
+        heatmapColorScheme =
+          document.getElementById("heatmap-color").value || "viridis";
+
+        // 重新渲染 => renderAll() or specifically re-render the graph & heatmap
+        const filtered = getFilteredArticles();
+        renderAll(filtered);
+      }
+
+      function loadDataWithPapaParse() {
+        return new Promise((resolve, reject) => {
+          Papa.parse(csvPath, {
+            download: true,
+            header: true,
+            skipEmptyLines: true,
+            complete: (results) => {
+              if (results.errors && results.errors.length > 0) {
+                reject(results.errors);
+              } else {
+                resolve(results.data);
+              }
+            },
+            error: (err) => reject(err),
+          });
+        });
+      }
+
+      function strToDate(str) {
+        if (!str) return null;
+        const [y, m, d] = str.split("-").map((s) => parseInt(s, 10));
+        if (!y || !m || !d) return null;
+        return new Date(y, m - 1, d);
+      }
+
+      function formatDate(d) {
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, "0");
+        const dd = String(d.getDate()).padStart(2, "0");
+        return `${yyyy}-${mm}-${dd}`;
+      }
+
+      function getFilteredArticles() {
+        return rawData.filter((item) => {
+          const d = strToDate(item.FocusedAt);
+          let passStart = true;
+          let passEnd = true;
+          if (startDate) passStart = d && d >= startDate;
+          if (endDate) passEnd = d && d <= endDate;
+          return passStart && passEnd;
+        });
+      }
+
+      function applyFilter() {
+        const sVal = document.getElementById("start-date").value;
+        const eVal = document.getElementById("end-date").value;
+        const kVal = parseInt(document.getElementById("top-k").value, 10) || 10;
+
+        startDate = sVal ? new Date(sVal) : null;
+        endDate = eVal ? new Date(eVal) : null;
+        topK = kVal;
+
+        const filtered = getFilteredArticles();
+        renderAll(filtered);
+      }
+
+      function resetFilter() {
+        if (defaultEarliest && defaultLatest) {
+          document.getElementById("start-date").value =
+            formatDate(defaultEarliest);
+          document.getElementById("end-date").value = formatDate(defaultLatest);
+          startDate = defaultEarliest;
+          endDate = defaultLatest;
+        }
+        topK = defaultTopK;
+        document.getElementById("top-k").value = defaultTopK;
+
+        const filtered = getFilteredArticles();
+        renderAll(filtered);
+      }
+
+      function renderSummaryCard(articles) {
+        const hintEl = document.getElementById("date-range-hint");
+        if (startDate && endDate) {
+          hintEl.textContent = `当前时间范围：${formatDate(
+            startDate
+          )} ~ ${formatDate(endDate)}`;
+        } else {
+          hintEl.textContent = `当前时间范围：- - -`;
+        }
+
+        const articleCount = articles.length;
+
+        let allTags = new Set();
+        articles.forEach((a) => {
+          const kwArr = a.Keywords
+            ? a.Keywords.split(",")
+                .map((k) => k.trim())
+                .filter(Boolean)
+            : [];
+          kwArr.forEach((tag) => allTags.add(tag));
+        });
+        const totalKeywords = allTags.size;
+
+        let globalTagCount = {};
+        articles.forEach((a) => {
+          const kwArr = a.Keywords
+            ? a.Keywords.split(",")
+                .map((k) => k.trim())
+                .filter(Boolean)
+            : [];
+          kwArr.forEach((tag) => {
+            if (!globalTagCount[tag]) globalTagCount[tag] = 0;
+            globalTagCount[tag]++;
+          });
+        });
+        const sortedKeys = Object.keys(globalTagCount).sort(
+          (a, b) => globalTagCount[b] - globalTagCount[a]
+        );
+        const mostUsedTag = sortedKeys[0] || "无";
+        const leastUsedTag = sortedKeys[sortedKeys.length - 1] || "无";
+
+        const infoContainer = document.querySelector(".summary-info");
+        if (infoContainer) {
+          infoContainer.innerHTML = `
+                <div class="info-item">
+                  <h3>文章总数</h3>
+                  <p>${articleCount} 篇</p>
+                </div>
+                <div class="info-item">
+                  <h3>标签总数</h3>
+                  <p>${totalKeywords} 个</p>
+                </div>
+                <div class="info-item">
+                  <h3>最常用标签</h3>
+                  <p >${mostUsedTag} (${
+            globalTagCount[mostUsedTag] || 0
+          } 次)</p>
+                </div>
+                <div class="info-item">
+                  <h3>最少用标签</h3>
+                  <p >${leastUsedTag} (${
+            globalTagCount[leastUsedTag] || 0
+          } 次)</p>
+                </div>
+              `;
+        }
+      }
+
+      function renderBarChart(articles) {
+        const loadingEl = document.getElementById("bar-loading");
+        if (loadingEl) loadingEl.style.display = "none";
+        const dom = document.getElementById("bar-chart");
+        if (!dom) return;
+
+        const chart = echarts.init(dom);
+
+        let keywordCount = {};
+        articles.forEach((a) => {
+          const arr = a.Keywords
+            ? a.Keywords.split(",")
+                .map((k) => k.trim())
+                .filter(Boolean)
+            : [];
+          arr.forEach((tag) => {
+            if (!keywordCount[tag]) keywordCount[tag] = 0;
+            keywordCount[tag]++;
+          });
+        });
+
+        const sortedTags = Object.keys(keywordCount).sort(
+          (a, b) => keywordCount[b] - keywordCount[a]
+        );
+        const slicedTags = sortedTags.slice(0, topK);
+
+        const xData = slicedTags;
+        const yData = xData.map((t) => keywordCount[t]);
+
+        const option = {
+          title: { text: "标签频次", left: "center" },
+          tooltip: { trigger: "axis" },
+          dataZoom: [
+            { type: "slider", show: true, start: 0, end: 100 },
+            { type: "inside", start: 0, end: 100 },
+          ],
+          xAxis: {
+            type: "category",
+            data: xData,
+            axisLabel: { rotate: 45 },
+          },
+          yAxis: { type: "value" },
+          series: [
+            {
+              type: "bar",
+              data: yData,
+              name: "出现次数",
+              itemStyle: { color: "#5470C6" },
+            },
+          ],
+        };
+        chart.setOption(option);
+      }
+
+      function renderPieChart(articles) {
+        const loadingEl = document.getElementById("pie-loading");
+        if (loadingEl) loadingEl.style.display = "none";
+        const dom = document.getElementById("pie-chart");
+        if (!dom) return;
+
+        const chart = echarts.init(dom);
+
+        let keywordCount = {};
+        articles.forEach((a) => {
+          const arr = a.Keywords
+            ? a.Keywords.split(",")
+                .map((k) => k.trim())
+                .filter(Boolean)
+            : [];
+          arr.forEach((tag) => {
+            if (!keywordCount[tag]) keywordCount[tag] = 0;
+            keywordCount[tag]++;
+          });
+        });
+
+        const sortedTags = Object.keys(keywordCount).sort(
+          (a, b) => keywordCount[b] - keywordCount[a]
+        );
+        const slicedTags = sortedTags.slice(0, topK);
+        const pieData = slicedTags.map((t) => ({
+          name: t,
+          value: keywordCount[t],
+        }));
+
+        const option = {
+          title: { text: "标签占比", left: "center" },
+          tooltip: { trigger: "item" },
+          series: [
+            {
+              type: "pie",
+              radius: "50%",
+              data: pieData,
+              emphasis: {
+                itemStyle: {
+                  shadowBlur: 10,
+                  shadowOffsetX: 0,
+                  shadowColor: "rgba(0,0,0,0.5)",
+                },
+              },
+            },
+          ],
+        };
+        chart.setOption(option);
+      }
+
+      function renderLineChart(articles) {
+        const loadingEl = document.getElementById("line-loading");
+        if (loadingEl) loadingEl.style.display = "none";
+        const dom = document.getElementById("line-chart");
+        if (!dom) return;
+
+        const chart = echarts.init(dom);
+
+        let dateMap = {};
+        articles.forEach((a) => {
+          const dt = strToDate(a.FocusedAt);
+          if (dt) {
+            const key = dt.toISOString().slice(0, 10);
+            if (!dateMap[key]) dateMap[key] = 0;
+            dateMap[key]++;
+          }
+        });
+        const sortedDates = Object.keys(dateMap).sort();
+        const xData = sortedDates;
+        const yData = xData.map((d) => dateMap[d]);
+
+        const option = {
+          title: { text: "时间趋势", left: "center" },
+          tooltip: { trigger: "axis" },
+          xAxis: { type: "category", data: xData, axisLabel: { rotate: 45 } },
+          yAxis: { type: "value" },
+          series: [
+            {
+              type: "line",
+              name: "文章数",
+              data: yData,
+              smooth: true,
+              lineStyle: { color: "#91cc75" },
+            },
+          ],
+        };
+        chart.setOption(option);
+      }
+
+      function renderWordCloud(articles) {
+        const loadingEl = document.getElementById("wc-loading");
+        if (loadingEl) loadingEl.style.display = "none";
+        const dom = document.getElementById("wordcloud-chart");
+        if (!dom) return;
+
+        const chart = echarts.init(dom);
+
+        let keywordCount = {};
+        articles.forEach((a) => {
+          const arr = a.Keywords
+            ? a.Keywords.split(",")
+                .map((k) => k.trim())
+                .filter(Boolean)
+            : [];
+          arr.forEach((tag) => {
+            if (!keywordCount[tag]) keywordCount[tag] = 0;
+            keywordCount[tag]++;
+          });
+        });
+
+        const wcData = Object.keys(keywordCount).map((k) => ({
+          name: k,
+          value: keywordCount[k],
+        }));
+
+        const option = {
+          title: { text: "标签词云", left: "center" },
+          tooltip: {},
+          series: [
+            {
+              type: "wordCloud",
+              gridSize: 2,
+              sizeRange: [10, 50],
+              rotationRange: [0, 0],
+              shape: "circle",
+              data: wcData,
+              textStyle: {
+                color: () => {
+                  return (
+                    "rgb(" +
+                    [
+                      Math.round(Math.random() * 160),
+                      Math.round(Math.random() * 160),
+                      Math.round(Math.random() * 160),
+                    ].join(",") +
+                    ")"
+                  );
+                },
+              },
+            },
+          ],
+        };
+        chart.setOption(option);
+      }
+
+      function renderExtremeArticles(articles) {
+        const container = document.getElementById("extreme-articles");
+        if (!container) return;
+
+        let arr = articles.map((a) => {
+          const kwArr = a.Keywords
+            ? a.Keywords.split(",")
+                .map((k) => k.trim())
+                .filter(Boolean)
+            : [];
+          return { ...a, tagCount: kwArr.length };
+        });
+
+        const maxArr = arr
+          .slice()
+          .sort((a, b) => b.tagCount - a.tagCount)
+          .slice(0, 5);
+        const minArr = arr
+          .slice()
+          .sort((a, b) => a.tagCount - b.tagCount)
+          .slice(0, 5);
+
+        container.innerHTML = `
+              <h2>最多 / 最少标签的文章（各前5篇）</h2>
+              <div class="article-lists-wrapper">
+                <div class="article-list-col">
+                  <h3>最多标签</h3>
+                  ${maxArr
+                    .map(
+                      (item) => `
+                      <p>
+                        <a href="${item.URL}" target="_blank">#${item.Title}#</a>
+                        （共 ${item.tagCount} 个标签）
+                      </p>
+                    `
+                    )
+                    .join("")}
+                </div>
+                <div class="article-list-col">
+                  <h3>最少标签</h3>
+                  ${minArr
+                    .map(
+                      (item) => `
+                      <p>
+                        <a href="${item.URL}" target="_blank">#${item.Title}#</a>
+                        （共 ${item.tagCount} 个标签）
+                      </p>
+                    `
+                    )
+                    .join("")}
+                </div>
+              </div>
+            `;
+      }
+      function prepareIncrementalData(articles) {
+        // 1. 统计标签频次
+        let freqMap = {};
+        // 2. 统计标签共现(可选)
+        let coOccurMap = {};
+
+        articles.forEach((a) => {
+          let arr = a.Keywords
+            ? a.Keywords.split(",")
+                .map((k) => k.trim())
+                .filter(Boolean)
+            : [];
+          // freq
+          arr.forEach((tag) => {
+            if (!freqMap[tag]) freqMap[tag] = 0;
+            freqMap[tag]++;
+          });
+          // co-occurrence
+          for (let i = 0; i < arr.length; i++) {
+            for (let j = i + 1; j < arr.length; j++) {
+              let t1 = arr[i],
+                t2 = arr[j];
+              if (t1 > t2) [t1, t2] = [t2, t1]; // 保持顺序
+              let pair = t1 + "|" + t2;
+              if (!coOccurMap[pair]) coOccurMap[pair] = 0;
+              coOccurMap[pair]++;
+            }
+          }
+        });
+
+        // 3. 构造所有节点
+        let allNodes = [];
+        Object.keys(freqMap).forEach((tag) => {
+          let size = 10 + freqMap[tag] * 5;
+          allNodes.push({
+            name: tag,
+            value: freqMap[tag],
+            symbolSize: size,
+          });
+        });
+        // 排序 (选做：如按出现次数由小到大，或字典序等)
+        // 例如按出现次数从小到大:
+        allNodes.sort((a, b) => a.value - b.value);
+
+        // 4. 构造所有边
+        let threshold = 2; // 共现次数阈值
+        let allEdges = [];
+        Object.keys(coOccurMap).forEach((pair) => {
+          let val = coOccurMap[pair];
+          if (val >= threshold) {
+            let [a, b] = pair.split("|");
+            allEdges.push({
+              source: a,
+              target: b,
+              value: val,
+            });
+          }
+        });
+
+        return { allNodes, allEdges };
+      }
+      /**
+       * 示例：力导向增量图
+       * - 初始基础斥力 repulsion 较高
+       * - 每次添加节点时，进一步提高 repulsion 与 edgeLength
+       * - 同时设置 avoidOverlap (若 ECharts >= 5.3, 需实验特性)
+       * - gravity 设置较高(如0.5~0.8)以让节点整体往中心收
+       */
+      function renderGrowthGraphIncremental(articles) {
+        const dom = document.getElementById("growth-graph-incremental");
+        const loadingEl = document.getElementById("growth-loading-incremental");
+        if (loadingEl) loadingEl.style.display = "none";
+        if (!dom) return;
+
+        const chart = echarts.init(dom);
+
+        // 1. 准备节点/边数据
+        let { allNodes, allEdges } = prepareIncrementalData(articles);
+
+        // 2. 初始空图
+        chart.setOption({
+          title: { text: "增量力导向图", left: "center" },
+          tooltip: {
+            formatter: (params) => {
+              if (params.dataType === "node") {
+                return `${params.name}：出现 ${params.data.value} 次`;
+              } else if (params.dataType === "edge") {
+                return `${params.data.source} - ${params.data.target}：共现 ${params.data.value} 次`;
+              }
+            },
+          },
+          series: [
+            {
+              type: "graph",
+              layout: "force",
+              roam: true,
+              label: {
+                show: true,
+                position: "inside",
+              },
+              emphasis: { focus: "adjacency" },
+              force: {
+                // 初始基础斥力、高向心力
+                repulsion: 2000, // 可根据数据量调整
+                edgeLength: 400,
+                gravity: 0.5, // 0~1 之间越大越集中于中心
+                avoidOverlap: 1
+              },
+              data: [],
+              edges: [],
+            },
+          ],
+        });
+
+        // 3. 分批添加节点
+        let currentNodes = [];
+        let currentEdges = [];
+        let idx = 0;
+
+        // 间隔 50ms，每秒 ~20帧
+        let addInterval = setInterval(() => {
+          if (idx >= allNodes.length) {
+            clearInterval(addInterval);
+            return;
+          }
+
+          let nodeToAdd = allNodes[idx];
+          currentNodes.push(nodeToAdd);
+
+          // 查找要连接的 edges
+          let newlyAddedEdges = allEdges.filter((ed) => {
+            return (
+              (ed.source === nodeToAdd.name &&
+                currentNodes.some((n) => n.name === ed.target)) ||
+              (ed.target === nodeToAdd.name &&
+                currentNodes.some((n) => n.name === ed.source))
+            );
+          });
+          currentEdges = currentEdges.concat(newlyAddedEdges);
+
+          idx++;
+
+          // 计算基于节点大小的斥力、距离
+          // 对于特别大的节点，可以额外放大几倍
+          // 这里示例 * 30, * 10 等，可自行微调
+          let dynamicRepulsion = 2000 + Math.pow(nodeToAdd.value, 1.2) * 30;
+          let dynamicEdgeLength = 400 + Math.pow(nodeToAdd.value, 1.2) * 10;
+
+          chart.setOption({
+            series: [
+              {
+                force: {
+                  repulsion: dynamicRepulsion,
+                  edgeLength: dynamicEdgeLength,
+                  gravity: 0.5,
+                  //  avoidOverlap: 1
+                },
+                data: currentNodes,
+                edges: currentEdges,
+                // 延长 update 动画, 给予更多布局时间
+                animationDurationUpdate: 1000,
+                animationEasingUpdate: "cubicOut",
+              },
+            ],
+          });
+        }, 42);
+      }
+
+
+      function renderHeatmap(articles) {
+        const loadingEl = document.getElementById("heatmap-loading");
+        if (loadingEl) loadingEl.style.display = "none";
+        const dom = document.getElementById("heatmap-chart");
+        if (!dom) return;
+
+        let chart = echarts.init(dom);
+
+        // 1. 准备标签列表 & co-occurrence
+        let freqMap = {};
+        let coOccurMap = {};
+        articles.forEach((a) => {
+          let arr = a.Keywords
+            ? a.Keywords.split(",")
+                .map((k) => k.trim())
+                .filter(Boolean)
+            : [];
+          arr.forEach((tag) => {
+            if (!freqMap[tag]) freqMap[tag] = 0;
+            freqMap[tag]++;
+          });
+          for (let i = 0; i < arr.length; i++) {
+            for (let j = i + 1; j < arr.length; j++) {
+              let t1 = arr[i],
+                t2 = arr[j];
+              if (t1 > t2) [t1, t2] = [t2, t1];
+              let key = t1 + "|" + t2;
+              if (!coOccurMap[key]) coOccurMap[key] = 0;
+              coOccurMap[key]++;
+            }
+          }
+        });
+
+        // 2. 选取出现次数最高的一批标签(如前20)
+        let sortedTags = Object.keys(freqMap).sort(
+          (a, b) => freqMap[b] - freqMap[a]
+        );
+        let topN = 20; // 只取前20
+        let selectedTags = sortedTags.slice(0, topN);
+
+        // 3. 构造 Heatmap 的 data: [[i, j, coCount], ...]
+        let heatmapData = [];
+        for (let i = 0; i < selectedTags.length; i++) {
+          for (let j = 0; j < selectedTags.length; j++) {
+            if (i === j) {
+              // 若自己与自己 => 用出现次数
+              let selfCount = freqMap[selectedTags[i]] || 0;
+              heatmapData.push([i, j, selfCount]);
+            } else {
+              let t1 = selectedTags[i],
+                t2 = selectedTags[j];
+              if (t1 > t2) [t1, t2] = [t2, t1];
+              let key = t1 + "|" + t2;
+              let cocc = coOccurMap[key] || 0;
+              heatmapData.push([i, j, cocc]);
+            }
+          }
+        }
+
+        // 4. 选定Heatmap色系
+        //    根据heatmapColorScheme等
+        //    ECharts可自带 some color schemes or manually define
+        let colorSchemes = {
+          viridis: [
+            "#440154",
+            "#443a83",
+            "#31688e",
+            "#21918c",
+            "#35b779",
+            "#8fd744",
+            "#fde725",
+          ],
+          blues: [
+            "#f7fbff",
+            "#deebf7",
+            "#c6dbef",
+            "#9ecae1",
+            "#6baed6",
+            "#3182bd",
+            "#08519c",
+          ],
+          reds: [
+            "#fff5f0",
+            "#fee0d2",
+            "#fcbba1",
+            "#fc9272",
+            "#fb6a4a",
+            "#ef3b2c",
+            "#cb181d",
+          ],
+        };
+        let selectedPalette =
+          colorSchemes[heatmapColorScheme] || colorSchemes["viridis"];
+
+        // 5. 配置
+        let option = {
+          title: { text: "标签共现热力图 (Top 20)", left: "center" },
+          tooltip: {
+            position: "top",
+            formatter: (p) => {
+              let i = p.value[0],
+                j = p.value[1],
+                val = p.value[2];
+              return `${selectedTags[i]} & ${selectedTags[j]}：${val} 次`;
+            },
+          },
+          animation: true,
+          grid: { top: "10%", bottom: "10%", left: "15%", right: "5%" },
+          xAxis: {
+            type: "category",
+            data: selectedTags,
+            splitArea: { show: true },
+            axisLabel: { rotate: 45 },
+          },
+          yAxis: {
+            type: "category",
+            data: selectedTags,
+            splitArea: { show: true },
+            inverse: true,
+          },
+          visualMap: {
+            min: 0,
+            max: Math.max(...heatmapData.map((d) => d[2])) || 1,
+            calculable: true,
+            orient: "horizontal",
+            left: "center",
+            bottom: "0%",
+            inRange: {
+              color: selectedPalette,
+            },
+          },
+          series: [
+            {
+              name: "Co-occurrence",
+              type: "heatmap",
+              data: heatmapData,
+              label: {
+                show: false, // 或true
+              },
+              emphasis: {
+                itemStyle: {
+                  shadowBlur: 10,
+                  shadowColor: "rgba(0,0,0,0.5)",
+                },
+              },
+            },
+          ],
+        };
+
+        chart.setOption(option);
+      }
+
+      function renderAll(filtered) {
+        renderSummaryCard(filtered);
+        renderBarChart(filtered);
+        renderPieChart(filtered);
+        renderLineChart(filtered);
+        renderWordCloud(filtered);
+        renderExtremeArticles(filtered);
+        renderGrowthGraphIncremental(filtered);
+        renderHeatmap(filtered);
+      }
+
+      async function init() {
+        try {
+          const data = await loadDataWithPapaParse();
+          rawData = data;
+
+          document.getElementById("download-link").href = csvPath;
+
+          let allDates = rawData
+            .map((d) => strToDate(d.FocusedAt))
+            .filter((dt) => dt instanceof Date && !isNaN(dt.getTime()))
+            .sort((a, b) => a - b);
+
+          if (allDates.length > 0) {
+            const earliest = allDates[0];
+            const latest = allDates[allDates.length - 1];
+            defaultEarliest = earliest;
+            defaultLatest = latest;
+
+            const startInput = document.getElementById("start-date");
+            const endInput = document.getElementById("end-date");
+            startInput.min = formatDate(earliest);
+            startInput.max = formatDate(latest);
+            endInput.min = formatDate(earliest);
+            endInput.max = formatDate(latest);
+
+            startInput.value = formatDate(earliest);
+            endInput.value = formatDate(latest);
+            startDate = earliest;
+            endDate = latest;
+          }
+          defaultTopK = 10;
+
+          // 事件监听 => 立刻更新
+          document
+            .getElementById("start-date")
+            .addEventListener("change", applyFilter);
+          document
+            .getElementById("end-date")
+            .addEventListener("change", applyFilter);
+          document
+            .getElementById("top-k")
+            .addEventListener("input", applyFilter);
+          document
+            .getElementById("reset-filter")
+            .addEventListener("click", resetFilter);
+
+          // 首次渲染
+          const filtered = getFilteredArticles();
+          renderAll(filtered);
+        } catch (err) {
+          console.error("CSV 加载或解析出错:", err);
+          alert("数据加载失败，请检查控制台日志。");
+        }
+      }
+
+      document.addEventListener("DOMContentLoaded", init);
+    </script>
+  </body>
+</html>
