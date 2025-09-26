@@ -40,6 +40,11 @@ jobs:
           git config --global user.name "GitHub Actions"
           git config --global user.email "actions@github.com"
           
+      - name: 确保 .nojekyll 文件存在
+        run: |
+          touch .nojekyll
+          echo "已创建 .nojekyll 文件以禁用 Jekyll 处理"
+          
       - name: 设置 Pages
         uses: actions/configure-pages@v4
         

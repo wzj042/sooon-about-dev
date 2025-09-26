@@ -813,17 +813,16 @@ progress {
 
 /* ==================== 底部声明样式 ==================== */
 .footer-attribution {
-  position: relative;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
   text-align: center;
   z-index: 5;
-  
+  padding: calc(var(--spacing-md) * var(--scale-factor));
   font-size: calc(var(--font-size-small) * var(--scale-factor));
   color: #666;
-  margin: calc(var(--spacing-lg) * var(--scale-factor)) 0 0 0;
-  padding: calc(var(--spacing-md) * var(--scale-factor));
   line-height: 1.4;
-  background: rgba(255, 255, 255, 0.9);
-  border-top: 1px solid #e0e0e0;
 }
 
 
