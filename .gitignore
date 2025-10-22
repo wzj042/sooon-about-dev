@@ -3,3 +3,6 @@
 
 # custom
 temp
+
+# mcp
+.playwright-mcp
