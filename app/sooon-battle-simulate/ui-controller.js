@@ -400,8 +400,16 @@ class UIController {
   updateOpponentAvatar(avatar) {
     const el = this.elements.opponentAvatar;
     if (!el) return;
+    
+    // 检查是否是SVG内容
+    if (typeof avatar === 'string' && avatar.includes('<svg')) {
+      // 如果是SVG内容，直接设置innerHTML
+      el.innerHTML = avatar;
+      el.style.backgroundImage = '';
+      el.classList.remove('image');
+    }
     // 简单支持：若是URL则作为背景图，否则显示字符
-    if (typeof avatar === 'string' && /^(https?:)?\/\//.test(avatar)) {
+    else if (typeof avatar === 'string' && /^(https?:)?\/\//.test(avatar)) {
       el.style.backgroundImage = `url("${avatar}")`;
       el.textContent = '';
       el.classList.add('image');

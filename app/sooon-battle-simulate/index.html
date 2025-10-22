@@ -7,9 +7,11 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <script src="game-state-manager.js"></script>
-  <script src="animation-manager.js"></script>
-  <script src="ui-controller.js"></script>
+    <script src="avatar-generator.js"></script>
+    <script src="avatar-selector.js"></script>
+    <script src="game-state-manager.js"></script>
+    <script src="animation-manager.js"></script>
+    <script src="ui-controller.js"></script>
   
   <!-- 主游戏容器 -->
   <div class="quiz-container">
@@ -105,8 +107,112 @@
     <!-- 底部题库来源声明 -->
     <div class="footer-attribution">
       <p>题库来源：<a href="https://sooon.ai/" target="_blank">素问</a>，详见
-        <a href="about.html" >关于</a>
+        <a href="about.html" >关于</a> ,可以通过
+        <a href="#" id="settings-link">设置</a> 修改答题 AI 表现
       </p>
+    </div>
+
+    <!-- 设置模态框 -->
+    <div class="modal-overlay" id="settings-modal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>游戏设置</h3>
+          <button class="modal-close" id="modal-close">&times;</button>
+        </div>
+        <div class="modal-body">
+          <!-- 头像设置区域 -->
+          <div class="setting-group">
+            <label class="setting-label">头像设置</label>
+            <div class="avatar-settings">
+              <div class="avatar-setting-item">
+                <div class="avatar-preview" id="user-avatar-preview">
+                  <div class="avatar">You</div>
+                </div>
+                <div class="avatar-info">
+                  <div class="avatar-name">用户头像</div>
+                  <button class="btn btn-outline" id="change-user-avatar">修改用户头像</button>
+                </div>
+              </div>
+              <div class="avatar-setting-item">
+                <div class="avatar-preview" id="ai-avatar-preview">
+                  <div class="opponent-avatar"></div>
+                </div>
+                <div class="avatar-info">
+                  <div class="avatar-name">AI头像</div>
+                  <button class="btn btn-outline" id="change-ai-avatar">修改AI头像</button>
+                </div>
+              </div>
+            </div>
+            <div class="setting-description">点击修改用户或AI的头像，支持自定义头像和随机生成。</div>
+          </div>
+          
+          <!-- AI设置区域 -->
+          <div class="setting-group">
+            <label class="setting-label">AI正确率 (%)</label>
+            <input type="number" id="ai-accuracy" class="setting-input" placeholder="请输入0-100的数字" min="0" max="100" step="1" pattern="[0-9]*" inputmode="numeric">
+            <div class="setting-description">设置AI答题的正确率，0%表示总是答错，100%表示总是答对。仅允许输入数字。</div>
+          </div>
+          
+          <div class="setting-group">
+            <label class="setting-label">AI速度范围 (毫秒)</label>
+            <div class="speed-inputs">
+              <input type="number" id="ai-speed-min" class="setting-input" placeholder="最小数字" min="100" max="5000" step="100" pattern="[0-9]*" inputmode="numeric">
+              <span class="speed-separator">-</span>
+              <input type="number" id="ai-speed-max" class="setting-input" placeholder="最大数字" min="100" max="5000" step="100" pattern="[0-9]*" inputmode="numeric">
+            </div>
+            <div class="setting-description">设置AI作答的延迟时间范围，仅允许输入100-5000之间的数字。</div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-primary" id="save-settings">保存设置</button>
+          <button class="btn btn-secondary" id="cancel-settings">取消</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 头像选择模态框 -->
+    <div class="modal-overlay" id="avatar-modal">
+      <div class="modal-content avatar-modal-content">
+        <div class="modal-header">
+          <h3>修改头像</h3>
+          <button class="modal-close" id="avatar-modal-close">&times;</button>
+        </div>
+        <div class="modal-body">
+          <!-- 当前头像显示 -->
+          <div class="current-avatar-section">
+            <div class="current-avatar-label">当前头像</div>
+            <div class="current-avatar-display" id="current-avatar-display"></div>
+          </div>
+          
+          <!-- 头像选择网格 -->
+          <div class="avatar-grid-section">
+            <div class="avatar-grid-label">选择头像</div>
+            <div class="avatar-grid" id="avatar-grid">
+              <!-- 4x4头像网格将通过JavaScript动态生成 -->
+            </div>
+          </div>
+          
+          <!-- 操作按钮 -->
+          <div class="avatar-actions">
+            <button class="btn btn-secondary" id="clear-avatar">清空选择</button>
+            <button class="btn btn-primary" id="regenerate-avatars">重新生成</button>
+          </div>
+          
+          <!-- 导入导出功能 -->
+          <div class="avatar-import-export">
+            <div class="import-export-label">头像管理</div>
+            <div class="import-export-buttons">
+              <button class="btn btn-outline" id="export-avatar">导出头像</button>
+              <button class="btn btn-outline" id="import-avatar">导入头像</button>
+              <input type="file" id="avatar-file-input" accept=".json" style="display: none;">
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" id="cancel-avatar">取消</button>
+          <button class="btn btn-primary" id="save-avatar">保存</button>
+        </div>
+      </div>
     </div>
   <script>
     /**
@@ -157,11 +263,34 @@
       });
 
       // 3.1 配置对手参数（头像、AI准确率、选择速度）
-      // 示例：70%正确率，0.4s~1.2s 随机作答延迟，头像为emoji
-      gameStateManager.configureOpponent({
-        avatar: '🤖',
-        ai: { accuracy: 0.7, speedMsRange: [1280, 2900] }
-      });
+      // 首先尝试加载保存的AI头像，如果没有则生成新的
+      loadOpponentAvatar();
+
+      // 3.1.1 添加AI头像点击事件
+      const opponentAvatar = document.querySelector('.opponent-avatar');
+      if (opponentAvatar && window.avatarSelector) {
+        opponentAvatar.style.cursor = 'pointer';
+        opponentAvatar.title = '点击修改AI头像';
+        opponentAvatar.addEventListener('click', () => {
+          window.avatarSelector.openModal('opponent');
+        });
+      }
+
+      // 3.1.2 添加用户头像点击事件和加载保存的头像
+      const playerAvatar = document.querySelector('.player-info .avatar');
+      if (playerAvatar && window.avatarSelector) {
+        playerAvatar.style.cursor = 'pointer';
+        playerAvatar.title = '点击修改用户头像';
+        playerAvatar.addEventListener('click', () => {
+          window.avatarSelector.openModal('player');
+        });
+        
+        // 加载保存的用户头像
+        loadPlayerAvatar();
+      }
+      
+      // 3.2 初始化设置模态框
+      initializeSettingsModal();
       
       // 4. 立即更新UI显示
       // 确保页面加载时显示正确的初始状态
@@ -195,6 +324,526 @@
       console.log('可设置的mode: 0-平局, 1-玩家胜, 2-对手胜');
       console.log('方法：debugSettle(0|1|2)');
     });
+    
+    /**
+     * 初始化设置模态框
+     * 从localStorage加载保存的状态，并设置事件监听器
+     */
+    function initializeSettingsModal() {
+      const settingsLink = document.getElementById('settings-link');
+      const settingsModal = document.getElementById('settings-modal');
+      const modalClose = document.getElementById('modal-close');
+      const cancelSettings = document.getElementById('cancel-settings');
+      const saveSettings = document.getElementById('save-settings');
+      const speedMinElement = document.getElementById('ai-speed-min');
+      const speedMaxElement = document.getElementById('ai-speed-max');
+      const accuracyElement = document.getElementById('ai-accuracy');
+      
+      if (!settingsLink || !settingsModal || !speedMinElement || !speedMaxElement || !accuracyElement) {
+        console.warn('设置模态框元素未找到');
+        return;
+      }
+      
+      // 从localStorage加载保存的状态
+      const savedSpeedMin = localStorage.getItem('aiSpeedMin');
+      const savedSpeedMax = localStorage.getItem('aiSpeedMax');
+      const savedAccuracy = localStorage.getItem('aiAccuracy');
+      
+      const speedMin = savedSpeedMin ? parseInt(savedSpeedMin) : 1280;
+      const speedMax = savedSpeedMax ? parseInt(savedSpeedMax) : 2900;
+      const accuracy = savedAccuracy ? parseFloat(savedAccuracy) : 0;
+      
+      // 设置初始值
+      speedMinElement.value = speedMin;
+      speedMaxElement.value = speedMax;
+      accuracyElement.value = accuracy;
+      
+      // 更新头像预览
+      updateAvatarPreviews();
+      
+      // 更新游戏状态管理器中的状态
+      if (gameStateManager) {
+        gameStateManager.updateState({ 
+          aiSpeedRange: [speedMin, speedMax],
+          aiAccuracy: accuracy / 100 // 转换为0-1范围
+        });
+      }
+      
+      // 打开模态框
+      function openModal() {
+        settingsModal.classList.add('show');
+        document.body.style.overflow = 'hidden';
+      }
+      
+      // 关闭模态框
+      function closeModal() {
+        settingsModal.classList.remove('show');
+        document.body.style.overflow = '';
+      }
+      
+      // 数据验证和修正函数
+      function validateAndCorrectInputs() {
+        let hasError = false;
+        
+        // 验证正确率
+        let accuracy = parseFloat(accuracyElement.value);
+        if (isNaN(accuracy)) {
+          // 如果输入为空或无效，保持原值不自动修正
+          accuracyElement.classList.remove('input-error');
+        } else if (accuracy < 0 || accuracy > 100) {
+          // 超出范围时自动修正并显示错误状态
+          accuracy = Math.max(0, Math.min(100, accuracy));
+          accuracyElement.value = accuracy;
+          accuracyElement.classList.add('input-error');
+          hasError = true;
+        } else {
+          accuracyElement.classList.remove('input-error');
+        }
+        
+        // 验证速度范围
+        let min = parseInt(speedMinElement.value);
+        let max = parseInt(speedMaxElement.value);
+        
+        if (isNaN(min)) {
+          speedMinElement.classList.remove('input-error');
+        } else if (min < 100 || min > 5000) {
+          min = Math.max(100, Math.min(5000, min));
+          speedMinElement.value = min;
+          speedMinElement.classList.add('input-error');
+          hasError = true;
+        } else {
+          speedMinElement.classList.remove('input-error');
+        }
+        
+        if (isNaN(max)) {
+          speedMaxElement.classList.remove('input-error');
+        } else if (max < 100 || max > 5000) {
+          max = Math.max(100, Math.min(5000, max));
+          speedMaxElement.value = max;
+          speedMaxElement.classList.add('input-error');
+          hasError = true;
+        } else {
+          speedMaxElement.classList.remove('input-error');
+        }
+        
+        // 确保最小值不大于最大值（仅在两个值都有效时检查）
+        if (!isNaN(min) && !isNaN(max) && min > max) {
+          const temp = min;
+          min = max;
+          max = temp;
+          speedMinElement.value = min;
+          speedMaxElement.value = max;
+          speedMinElement.classList.add('input-error');
+          speedMaxElement.classList.add('input-error');
+          hasError = true;
+        }
+        
+        return { accuracy, min, max, hasError };
+      }
+      
+      // 数字输入过滤函数
+      function filterNumericInput(element) {
+        // 移除所有非数字字符（包括负号、小数点等）
+        const originalValue = element.value;
+        const numericValue = originalValue.replace(/[^0-9]/g, '');
+        
+        if (originalValue !== numericValue) {
+          element.value = numericValue;
+          element.classList.add('input-error');
+          
+          // 显示过滤提示
+          showCorrectionTip(element, '仅允许输入数字');
+          
+          // 短暂显示错误状态后清除
+          setTimeout(() => {
+            element.classList.remove('input-error');
+          }, 1000);
+        }
+      }
+      
+      // 键盘事件过滤函数
+      function handleKeyPress(e) {
+        const allowedKeys = [
+          'Backspace', 'Delete', 'Tab', 'Enter', 'Escape',
+          'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown',
+          'Home', 'End'
+        ];
+        
+        // 允许的功能键
+        if (allowedKeys.includes(e.key)) {
+          return;
+        }
+        
+        // 只允许数字键
+        if (!/^[0-9]$/.test(e.key)) {
+          e.preventDefault();
+          showCorrectionTip(e.target, '仅允许输入数字');
+        }
+      }
+      
+      // 智能输入处理函数
+      function handleSmartInput(element, min, max, defaultValue) {
+        // 首先过滤非数字字符
+        filterNumericInput(element);
+        
+        const value = parseInt(element.value);
+        
+        // 如果输入为空，不处理
+        if (element.value === '') {
+          element.classList.remove('input-error');
+          return;
+        }
+        
+        // 如果输入无效数字
+        if (isNaN(value)) {
+          element.classList.add('input-error');
+          return;
+        }
+        
+        // 如果超出范围，自动修正
+        if (value < min || value > max) {
+          const correctedValue = Math.max(min, Math.min(max, value));
+          element.value = correctedValue;
+          element.classList.add('input-error');
+          
+          // 显示修正提示
+          showCorrectionTip(element, `已自动修正为 ${correctedValue}`);
+        } else {
+          element.classList.remove('input-error');
+        }
+      }
+      
+      // 显示修正提示
+      function showCorrectionTip(element, message) {
+        // 创建提示元素
+        let tip = element.parentNode.querySelector('.correction-tip');
+        if (!tip) {
+          tip = document.createElement('div');
+          tip.className = 'correction-tip';
+          tip.style.cssText = `
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: #ff9800;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            z-index: 1000;
+            margin-top: 2px;
+          `;
+          element.parentNode.style.position = 'relative';
+          element.parentNode.appendChild(tip);
+        }
+        
+        tip.textContent = message;
+        tip.style.display = 'block';
+        
+        // 3秒后自动隐藏
+        setTimeout(() => {
+          tip.style.display = 'none';
+        }, 3000);
+      }
+      
+      // 实时输入监听
+      function addInputListeners() {
+        // 为所有输入框添加键盘事件监听
+        [accuracyElement, speedMinElement, speedMaxElement].forEach(element => {
+          // 键盘按下事件监听
+          element.addEventListener('keydown', handleKeyPress);
+          
+          // 粘贴事件监听
+          element.addEventListener('paste', function(e) {
+            // 延迟处理粘贴内容
+            setTimeout(() => {
+              filterNumericInput(this);
+            }, 10);
+          });
+        });
+        
+        // 正确率输入框监听
+        accuracyElement.addEventListener('input', function() {
+          handleSmartInput(this, 0, 100, 0);
+        });
+        
+        // 速度范围输入框监听
+        speedMinElement.addEventListener('input', function() {
+          handleSmartInput(this, 100, 5000, 100);
+        });
+        
+        speedMaxElement.addEventListener('input', function() {
+          handleSmartInput(this, 100, 5000, 5000);
+        });
+        
+        // 失去焦点时的最终验证和保存
+        accuracyElement.addEventListener('blur', function() {
+          const result = validateAndCorrectInputs();
+          if (!result.hasError && !isNaN(result.accuracy)) {
+            // 保存到localStorage
+            localStorage.setItem('aiAccuracy', result.accuracy.toString());
+            // 更新游戏状态
+            if (gameStateManager) {
+              gameStateManager.updateState({ 
+                aiAccuracy: result.accuracy / 100
+              });
+            }
+          }
+        });
+        
+        speedMinElement.addEventListener('blur', function() {
+          const result = validateAndCorrectInputs();
+          if (!result.hasError && !isNaN(result.min)) {
+            localStorage.setItem('aiSpeedMin', result.min.toString());
+            // 更新游戏状态
+            if (gameStateManager) {
+              gameStateManager.updateState({ 
+                aiSpeedRange: [result.min, result.max]
+              });
+            }
+          }
+        });
+        
+        speedMaxElement.addEventListener('blur', function() {
+          const result = validateAndCorrectInputs();
+          if (!result.hasError && !isNaN(result.max)) {
+            localStorage.setItem('aiSpeedMax', result.max.toString());
+            // 更新游戏状态
+            if (gameStateManager) {
+              gameStateManager.updateState({ 
+                aiSpeedRange: [result.min, result.max]
+              });
+            }
+          }
+        });
+        
+        // 键盘事件监听（Enter键保存）
+        [accuracyElement, speedMinElement, speedMaxElement].forEach(element => {
+          element.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+              const result = validateAndCorrectInputs();
+              if (!result.hasError) {
+                // 自动保存并更新状态
+                if (this === accuracyElement && !isNaN(result.accuracy)) {
+                  localStorage.setItem('aiAccuracy', result.accuracy.toString());
+                  if (gameStateManager) {
+                    gameStateManager.updateState({ aiAccuracy: result.accuracy / 100 });
+                  }
+                } else if ((this === speedMinElement || this === speedMaxElement) && 
+                          !isNaN(result.min) && !isNaN(result.max)) {
+                  localStorage.setItem('aiSpeedMin', result.min.toString());
+                  localStorage.setItem('aiSpeedMax', result.max.toString());
+                  if (gameStateManager) {
+                    gameStateManager.updateState({ aiSpeedRange: [result.min, result.max] });
+                  }
+                }
+              }
+            }
+          });
+        });
+      }
+      
+      // 保存设置
+      function saveSettingsHandler() {
+        const result = validateAndCorrectInputs();
+        
+        if (result.hasError) {
+          // 显示错误提示
+          alert('请检查输入值是否在有效范围内：\n- 正确率：0-100%\n- 速度范围：100-5000ms');
+          return;
+        }
+        
+        // 更新游戏状态管理器
+        if (gameStateManager) {
+          gameStateManager.updateState({ 
+            aiSpeedRange: [result.min, result.max],
+            aiAccuracy: result.accuracy / 100 // 转换为0-1范围
+          });
+        }
+        
+        // 保存到localStorage
+        localStorage.setItem('aiSpeedMin', result.min.toString());
+        localStorage.setItem('aiSpeedMax', result.max.toString());
+        localStorage.setItem('aiAccuracy', result.accuracy.toString());
+        
+        console.log('AI设置已保存 - 速度范围:', result.min + '-' + result.max + 'ms', '正确率:', result.accuracy + '%');
+        
+        closeModal();
+      }
+      
+      // 初始化输入监听
+      addInputListeners();
+      
+      // 头像修改按钮事件监听器
+      const changeUserAvatarBtn = document.getElementById('change-user-avatar');
+      const changeAiAvatarBtn = document.getElementById('change-ai-avatar');
+      
+      if (changeUserAvatarBtn && window.avatarSelector) {
+        changeUserAvatarBtn.addEventListener('click', function() {
+          window.avatarSelector.openModal('player');
+        });
+      }
+      
+      if (changeAiAvatarBtn && window.avatarSelector) {
+        changeAiAvatarBtn.addEventListener('click', function() {
+          window.avatarSelector.openModal('opponent');
+        });
+      }
+      
+      // 事件监听器
+      settingsLink.addEventListener('click', function(e) {
+        e.preventDefault();
+        openModal();
+      });
+      
+      modalClose.addEventListener('click', closeModal);
+      cancelSettings.addEventListener('click', closeModal);
+      saveSettings.addEventListener('click', saveSettingsHandler);
+      
+      // 点击模态框背景关闭
+      settingsModal.addEventListener('click', function(e) {
+        if (e.target === settingsModal) {
+          closeModal();
+        }
+      });
+      
+      // ESC键关闭模态框
+      document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && settingsModal.classList.contains('show')) {
+          closeModal();
+        }
+      });
+      
+      console.log('设置模态框初始化完成');
+      console.log('当前设置 - 速度范围:', speedMin + '-' + speedMax + 'ms', '正确率:', accuracy + '%');
+    }
+    
+    /**
+     * 加载保存的AI头像
+     */
+    function loadOpponentAvatar() {
+      try {
+        const savedAvatarData = localStorage.getItem('sooon-avatar-data');
+        if (savedAvatarData) {
+          const avatarData = JSON.parse(savedAvatarData);
+          const opponentAvatar = document.querySelector('.opponent-avatar');
+          
+          if (opponentAvatar && avatarData.svg) {
+            // 清空默认内容并设置保存的头像
+            opponentAvatar.innerHTML = '';
+            opponentAvatar.insertAdjacentHTML('beforeend', avatarData.svg);
+            console.log('AI头像已从本地存储加载:', avatarData.style, avatarData.seed);
+            
+            // 更新游戏状态管理器中的头像
+            if (gameStateManager) {
+              gameStateManager.configureOpponent({
+                avatar: avatarData.svg,
+                ai: { accuracy: 0, speedMsRange: [1280, 2900] }
+              });
+            }
+            return; // 成功加载保存的头像，直接返回
+          }
+        }
+        
+        // 如果没有保存的头像，生成新的AI头像
+        console.log('未找到保存的AI头像，生成新头像');
+        generateNewOpponentAvatar();
+      } catch (error) {
+        console.error('加载AI头像失败:', error);
+        // 出错时也生成新头像
+        generateNewOpponentAvatar();
+      }
+    }
+
+    /**
+     * 生成新的AI头像
+     */
+    function generateNewOpponentAvatar() {
+      let aiAvatar = '🤖'; // 默认头像
+      if (window.avatarGenerator) {
+        try {
+          // 异步设置头像到DOM元素
+          window.avatarGenerator.setAvatarToElement('.opponent-avatar').then(avatarData => {
+            if (avatarData) {
+              aiAvatar = avatarData.svg; // 使用生成的SVG头像
+              console.log('AI头像已生成，风格:', avatarData.style, '种子:', avatarData.seed);
+              
+              // 更新游戏状态管理器中的头像
+              if (gameStateManager) {
+                gameStateManager.configureOpponent({
+                  avatar: aiAvatar,
+                  ai: { accuracy: 0, speedMsRange: [1280, 2900] }
+                });
+              }
+            }
+          }).catch(error => {
+            console.warn('头像生成失败，使用默认头像:', error);
+            if (gameStateManager) {
+              gameStateManager.configureOpponent({
+                avatar: aiAvatar,
+                ai: { accuracy: 0, speedMsRange: [1280, 2900] }
+              });
+            }
+          });
+        } catch (error) {
+          console.warn('头像生成失败，使用默认头像:', error);
+        }
+      }
+      
+      // 如果头像生成器不可用，立即配置对手
+      if (!window.avatarGenerator && gameStateManager) {
+        gameStateManager.configureOpponent({
+          avatar: aiAvatar,
+          ai: { accuracy: 0, speedMsRange: [1280, 2900] }
+        });
+      }
+    }
+
+    /**
+     * 加载保存的用户头像
+     */
+    function loadPlayerAvatar() {
+      try {
+        const savedAvatarData = localStorage.getItem('sooon-player-avatar-data');
+        if (savedAvatarData) {
+          const avatarData = JSON.parse(savedAvatarData);
+          const playerAvatar = document.querySelector('.player-info .avatar');
+          
+          if (playerAvatar && avatarData.svg) {
+            // 清空默认内容并设置保存的头像
+            playerAvatar.innerHTML = '';
+            playerAvatar.insertAdjacentHTML('beforeend', avatarData.svg);
+            console.log('用户头像已从本地存储加载:', avatarData.style, avatarData.seed);
+          }
+        } else {
+          console.log('未找到保存的用户头像，使用默认头像');
+        }
+      } catch (error) {
+        console.error('加载用户头像失败:', error);
+      }
+    }
+
+    /**
+     * 更新头像预览
+     */
+    function updateAvatarPreviews() {
+      // 更新用户头像预览
+      const userAvatarPreview = document.getElementById('user-avatar-preview');
+      const userAvatar = document.querySelector('.player-info .avatar');
+      if (userAvatarPreview && userAvatar) {
+        userAvatarPreview.innerHTML = userAvatar.innerHTML;
+      }
+      
+      // 更新AI头像预览
+      const aiAvatarPreview = document.getElementById('ai-avatar-preview');
+      const aiAvatar = document.querySelector('.opponent-avatar');
+      if (aiAvatarPreview && aiAvatar) {
+        aiAvatarPreview.innerHTML = aiAvatar.innerHTML;
+      }
+    }
+    
+    // 将函数暴露到全局作用域，供头像选择器调用
+    window.updateAvatarPreviews = updateAvatarPreviews;
     
     /**
      * 页面卸载事件处理
