@@ -117,7 +117,13 @@ class GameStateManager {
       
       // ==================== 历史记录 ====================
       /** @type {Array<Object>} 游戏历史记录，存储每轮的结果 */
-      history: []
+      history: [],
+      
+      // ==================== AI设置 ====================
+      /** @type {[number, number]} AI速度范围(毫秒) */
+      aiSpeedRange: [1280, 2900],
+      /** @type {number} AI正确率(0-1) */
+      aiAccuracy: 0
     };
     
     /**
@@ -559,7 +565,7 @@ class GameStateManager {
     }
     
     // 基于AI速度参数添加随机延迟
-    const [minMs, maxMs] = (this.state.opponent?.ai?.speedMsRange) || [700, 1200];
+    const [minMs, maxMs] = this.state.aiSpeedRange || [1280, 2900];
     console.log(`对手作答延迟范围: ${minMs}ms - ${maxMs}ms`);
     const delay = Math.random() * (maxMs - minMs) + minMs;
     console.log(`对手作答延迟: ${delay}ms`);
@@ -582,9 +588,10 @@ class GameStateManager {
     
     console.log('对手开始选择答案...');
     
-    // 根据AI准确率决定是否选择正确答案
-    const accuracy = Math.max(0, Math.min(1, this.state.opponent?.ai?.accuracy ?? 0.5));
     let opponentChoice;
+    
+    // 根据AI准确率决定是否选择正确答案
+    const accuracy = Math.max(0, Math.min(1, this.state.aiAccuracy ?? 0));
     const shouldAnswerCorrectly = Math.random() < accuracy;
     if (shouldAnswerCorrectly) {
       opponentChoice = this.state.correctAnswer; // 选择正确答案索引(0-3)
