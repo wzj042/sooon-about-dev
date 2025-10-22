@@ -89,7 +89,9 @@ class GameStateManager {
       /** @type {Object} 对手配置，包括头像与AI参数 */
       opponent: {
         /** @type {string} 对手头像。可为单字符/emoji或图片URL */
-        avatar: 'B',
+        avatar: '',
+        /** @type {boolean} 是否固定对手头像，true表示固定，false表示每轮刷新 */
+        avatarFixed: false,
         /** @type {{ accuracy: number, speedMsRange: [number, number] }} AI参数：准确率与作答速度区间 */
         ai: {
           /**
@@ -123,7 +125,7 @@ class GameStateManager {
       /** @type {[number, number]} AI速度范围(毫秒) */
       aiSpeedRange: [1280, 2900],
       /** @type {number} AI正确率(0-1) */
-      aiAccuracy: 0
+      aiAccuracy: 0.6
     };
     
     /**
@@ -361,6 +363,14 @@ class GameStateManager {
     
     // 准备题库与本局题目
     await this.ensureQuestionsPrepared(this.state.totalRounds);
+    
+    // 检查是否需要刷新对手头像（每局开始时刷新一次）
+    if (!this.state.opponent?.avatarFixed && window.generateNewOpponentAvatar) {
+      console.log('头像未固定，新局开始时刷新对手头像');
+      window.generateNewOpponentAvatar();
+    } else if (this.state.opponent?.avatarFixed) {
+      console.log('头像已固定，保持当前头像');
+    }
     
     // 自动开始第一轮游戏
     this.startRound(1);
@@ -637,14 +647,15 @@ class GameStateManager {
   }
 
   /**
-   * 配置对手参数（头像、AI准确率、速度区间）
-   * @param {{ avatar?: string, ai?: { accuracy?: number, speedMsRange?: [number, number] } }} config
+   * 配置对手参数（头像、AI准确率、速度区间、头像固定设置）
+   * @param {{ avatar?: string, avatarFixed?: boolean, ai?: { accuracy?: number, speedMsRange?: [number, number] } }} config
    */
   configureOpponent(config = {}) {
     const current = this.state.opponent || {};
     const currentAi = current.ai || {};
     const next = {
       avatar: config.avatar ?? current.avatar ?? 'B',
+      avatarFixed: typeof config.avatarFixed === 'boolean' ? config.avatarFixed : (current.avatarFixed ?? false),
       ai: {
         accuracy: typeof config?.ai?.accuracy === 'number' ? config.ai.accuracy : (currentAi.accuracy ?? 0.5),
         speedMsRange: Array.isArray(config?.ai?.speedMsRange) && config.ai.speedMsRange.length === 2
@@ -653,6 +664,19 @@ class GameStateManager {
       }
     };
     this.updateState({ opponent: next });
+  }
+
+  /**
+   * 设置头像固定状态
+   * @param {boolean} fixed - 是否固定头像
+   */
+  setAvatarFixed(fixed) {
+    this.updateState({ 
+      opponent: { 
+        ...this.state.opponent, 
+        avatarFixed: fixed 
+      } 
+    });
   }
 
   /** 清理对手延迟定时器 */

@@ -162,6 +162,16 @@
             </div>
             <div class="setting-description">设置AI作答的延迟时间范围，仅允许输入100-5000之间的数字。</div>
           </div>
+          
+          <!-- 头像固定设置 -->
+          <div class="setting-group">
+            <label class="setting-label">头像设置</label>
+            <div class="checkbox-setting">
+              <input type="checkbox" id="fix-opponent-avatar" class="setting-checkbox">
+              <label for="fix-opponent-avatar" class="checkbox-label">固定对手头像</label>
+            </div>
+            <div class="setting-description">勾选后对手头像将固定不变，不勾选则每局游戏开始时刷新一次头像。</div>
+          </div>
         </div>
         <div class="modal-footer">
           <button class="btn btn-primary" id="save-settings">保存设置</button>
@@ -338,8 +348,9 @@
       const speedMinElement = document.getElementById('ai-speed-min');
       const speedMaxElement = document.getElementById('ai-speed-max');
       const accuracyElement = document.getElementById('ai-accuracy');
+      const fixAvatarElement = document.getElementById('fix-opponent-avatar');
       
-      if (!settingsLink || !settingsModal || !speedMinElement || !speedMaxElement || !accuracyElement) {
+      if (!settingsLink || !settingsModal || !speedMinElement || !speedMaxElement || !accuracyElement || !fixAvatarElement) {
         console.warn('设置模态框元素未找到');
         return;
       }
@@ -348,15 +359,18 @@
       const savedSpeedMin = localStorage.getItem('aiSpeedMin');
       const savedSpeedMax = localStorage.getItem('aiSpeedMax');
       const savedAccuracy = localStorage.getItem('aiAccuracy');
+      const savedAvatarFixed = localStorage.getItem('avatarFixed');
       
       const speedMin = savedSpeedMin ? parseInt(savedSpeedMin) : 1280;
       const speedMax = savedSpeedMax ? parseInt(savedSpeedMax) : 2900;
       const accuracy = savedAccuracy ? parseFloat(savedAccuracy) : 0;
+      const avatarFixed = savedAvatarFixed ? JSON.parse(savedAvatarFixed) : false;
       
       // 设置初始值
       speedMinElement.value = speedMin;
       speedMaxElement.value = speedMax;
       accuracyElement.value = accuracy;
+      fixAvatarElement.checked = avatarFixed;
       
       // 更新头像预览
       updateAvatarPreviews();
@@ -367,6 +381,8 @@
           aiSpeedRange: [speedMin, speedMax],
           aiAccuracy: accuracy / 100 // 转换为0-1范围
         });
+        // 设置头像固定状态
+        gameStateManager.setAvatarFixed(avatarFixed);
       }
       
       // 打开模态框
@@ -653,20 +669,48 @@
           return;
         }
         
+        // 获取头像固定设置
+        const avatarFixed = fixAvatarElement.checked;
+        
+        // 如果用户勾选了固定头像，保存当前显示的头像
+        if (avatarFixed) {
+          const currentOpponentAvatar = document.querySelector('.opponent-avatar');
+          if (currentOpponentAvatar && currentOpponentAvatar.innerHTML) {
+            // 获取当前头像的HTML内容
+            const currentAvatarHTML = currentOpponentAvatar.innerHTML;
+            
+            // 构造头像数据对象
+            const avatarData = {
+              svg: currentAvatarHTML,
+              style: 'current',
+              seed: 'fixed-' + Date.now(),
+              timestamp: Date.now(),
+              isFixed: true
+            };
+            
+            // 保存当前头像到localStorage
+            localStorage.setItem('sooon-avatar-data', JSON.stringify(avatarData));
+            console.log('已保存当前头像用于固定显示');
+          }
+        }
+        
         // 更新游戏状态管理器
         if (gameStateManager) {
           gameStateManager.updateState({ 
             aiSpeedRange: [result.min, result.max],
             aiAccuracy: result.accuracy / 100 // 转换为0-1范围
           });
+          // 设置头像固定状态
+          gameStateManager.setAvatarFixed(avatarFixed);
         }
         
         // 保存到localStorage
         localStorage.setItem('aiSpeedMin', result.min.toString());
         localStorage.setItem('aiSpeedMax', result.max.toString());
         localStorage.setItem('aiAccuracy', result.accuracy.toString());
+        localStorage.setItem('avatarFixed', JSON.stringify(avatarFixed));
         
-        console.log('AI设置已保存 - 速度范围:', result.min + '-' + result.max + 'ms', '正确率:', result.accuracy + '%');
+        console.log('AI设置已保存 - 速度范围:', result.min + '-' + result.max + 'ms', '正确率:', result.accuracy + '%', '头像固定:', avatarFixed ? '是' : '否');
         
         closeModal();
       }
@@ -723,6 +767,10 @@
      */
     function loadOpponentAvatar() {
       try {
+        // 首先检查头像固定设置
+        const savedAvatarFixed = localStorage.getItem('avatarFixed');
+        const avatarFixed = savedAvatarFixed ? JSON.parse(savedAvatarFixed) : false;
+        
         const savedAvatarData = localStorage.getItem('sooon-avatar-data');
         if (savedAvatarData) {
           const avatarData = JSON.parse(savedAvatarData);
@@ -734,10 +782,11 @@
             opponentAvatar.insertAdjacentHTML('beforeend', avatarData.svg);
             console.log('AI头像已从本地存储加载:', avatarData.style, avatarData.seed);
             
-            // 更新游戏状态管理器中的头像
+            // 更新游戏状态管理器中的头像和固定状态
             if (gameStateManager) {
               gameStateManager.configureOpponent({
                 avatar: avatarData.svg,
+                avatarFixed: avatarFixed,
                 ai: { accuracy: 0, speedMsRange: [1280, 2900] }
               });
             }
@@ -745,8 +794,26 @@
           }
         }
         
-        // 如果没有保存的头像，生成新的AI头像
-        console.log('未找到保存的AI头像，生成新头像');
+        // 如果没有保存的头像，检查是否固定头像
+        if (avatarFixed) {
+          console.log('头像设置为固定，但没有保存的头像，使用默认头像');
+          const opponentAvatar = document.querySelector('.opponent-avatar');
+          if (opponentAvatar) {
+            opponentAvatar.innerHTML = '🤖'; // 使用默认头像
+          }
+          // 更新游戏状态管理器
+          if (gameStateManager) {
+            gameStateManager.configureOpponent({
+              avatar: '🤖',
+              avatarFixed: avatarFixed,
+              ai: { accuracy: 0, speedMsRange: [1280, 2900] }
+            });
+          }
+          return;
+        }
+        
+        // 如果没有保存的头像且不固定，生成新的AI头像
+        console.log('未找到保存的AI头像且未固定，生成新头像');
         generateNewOpponentAvatar();
       } catch (error) {
         console.error('加载AI头像失败:', error);
@@ -770,8 +837,13 @@
               
               // 更新游戏状态管理器中的头像
               if (gameStateManager) {
+                // 检查头像固定设置
+                const savedAvatarFixed = localStorage.getItem('avatarFixed');
+                const avatarFixed = savedAvatarFixed ? JSON.parse(savedAvatarFixed) : false;
+                
                 gameStateManager.configureOpponent({
                   avatar: aiAvatar,
+                  avatarFixed: avatarFixed,
                   ai: { accuracy: 0, speedMsRange: [1280, 2900] }
                 });
               }
@@ -779,8 +851,13 @@
           }).catch(error => {
             console.warn('头像生成失败，使用默认头像:', error);
             if (gameStateManager) {
+              // 检查头像固定设置
+              const savedAvatarFixed = localStorage.getItem('avatarFixed');
+              const avatarFixed = savedAvatarFixed ? JSON.parse(savedAvatarFixed) : false;
+              
               gameStateManager.configureOpponent({
                 avatar: aiAvatar,
+                avatarFixed: avatarFixed,
                 ai: { accuracy: 0, speedMsRange: [1280, 2900] }
               });
             }
@@ -792,12 +869,20 @@
       
       // 如果头像生成器不可用，立即配置对手
       if (!window.avatarGenerator && gameStateManager) {
+        // 检查头像固定设置
+        const savedAvatarFixed = localStorage.getItem('avatarFixed');
+        const avatarFixed = savedAvatarFixed ? JSON.parse(savedAvatarFixed) : false;
+        
         gameStateManager.configureOpponent({
           avatar: aiAvatar,
+          avatarFixed: avatarFixed,
           ai: { accuracy: 0, speedMsRange: [1280, 2900] }
         });
       }
     }
+    
+    // 将函数暴露到全局作用域，供游戏状态管理器调用
+    window.generateNewOpponentAvatar = generateNewOpponentAvatar;
 
     /**
      * 加载保存的用户头像

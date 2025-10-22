@@ -1155,6 +1155,28 @@ progress {
   line-height: 1.4;
 }
 
+/* 勾选框设置样式 */
+.checkbox-setting {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--spacing-sm) * var(--scale-factor));
+  margin-bottom: calc(var(--spacing-sm) * var(--scale-factor));
+}
+
+.setting-checkbox {
+  width: calc(18px * var(--scale-factor));
+  height: calc(18px * var(--scale-factor));
+  accent-color: #2196F3;
+  cursor: pointer;
+}
+
+.checkbox-label {
+  font-size: calc(var(--font-size-normal) * var(--scale-factor));
+  color: #333;
+  cursor: pointer;
+  user-select: none;
+}
+
 .modal-footer {
   padding: calc(var(--spacing-lg) * var(--scale-factor));
   border-top: 1px solid #eee;
