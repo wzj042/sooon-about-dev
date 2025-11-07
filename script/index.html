@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="light dark">
+    <title>脚本目录 - 素问相关二次开发</title>
+    <style>
+        body {
+            margin: 1em auto;
+            max-width: 50em;
+            padding: 0 1.42em 3.24em;
+            font-size: 1.2em;
+            line-height: 1.62;
+        }
+
+        h1,
+        h2,
+        h3 {
+            line-height: 1.2;
+        }
+
+        code {
+            background: rgba(0, 0, 0, 0.05);
+            padding: 0.2em 0.4em;
+            border-radius: 3px;
+            font-size: 0.9em;
+        }
+
+        pre {
+            background: rgba(0, 0, 0, 0.05);
+            padding: 1em;
+            border-radius: 6px;
+            overflow-x: auto;
+        }
+
+        pre code {
+            background: none;
+            padding: 0;
+        }
+
+        details {
+            margin: 1.5em 0;
+            padding: 1em;
+            border: 1px solid rgba(0, 0, 0, 0.1);
+            border-radius: 6px;
+        }
+
+        summary {
+            cursor: pointer;
+            user-select: none;
+            margin-bottom: 0.5em;
+        }
+
+        summary:hover {
+            color: #0366d6;
+        }
+
+        a {
+            color: #0366d6;
+            text-decoration: none;
+        }
+
+        a:hover {
+            text-decoration: underline;
+        }
+
+        .script-list {
+            list-style: none;
+            padding: 0;
+        }
+
+        .script-item {
+            margin: 1em 0;
+            padding: 1em;
+            border: 1px solid rgba(0, 0, 0, 0.1);
+            border-radius: 6px;
+            transition: background-color 0.2s;
+        }
+
+        .script-item:hover {
+            background-color: rgba(0, 0, 0, 0.02);
+        }
+
+        .script-item a {
+            display: block;
+            text-decoration: none;
+            color: inherit;
+        }
+
+        .script-name {
+            font-size: 1.1em;
+            font-weight: bold;
+            margin-bottom: 0.5em;
+            color: #0366d6;
+        }
+
+        .script-meta {
+            font-size: 0.9em;
+            color: #666;
+            display: flex;
+            gap: 1.5em;
+            flex-wrap: wrap;
+        }
+
+        .script-meta span {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3em;
+        }
+
+        ol,
+        ul {
+            padding-left: 1.5em;
+        }
+
+        li {
+            margin: 0.5em 0;
+        }
+
+        hr {
+            border: none;
+            border-top: 1px solid rgba(0, 0, 0, 0.1);
+            margin: 2em 0;
+        }
+        figure {
+            text-align: center;
+            margin: 1em 0;
+        }
+        figure img {
+            max-width: 100%;
+            height: auto;
+        }
+        figure figcaption {
+            font-size: 0.8em;
+            color: #666;
+        }
+        @media (prefers-color-scheme: dark) {
+            body {
+                background: #1a1a1a;
+                color: #e0e0e0;
+            }
+
+            code,
+            pre {
+                background: rgba(255, 255, 255, 0.1);
+            }
+
+            a {
+                color: #58a6ff;
+            }
+
+            hr {
+                border-top-color: rgba(255, 255, 255, 0.1);
+            }
+
+            details {
+                border-color: rgba(255, 255, 255, 0.2);
+            }
+
+            summary:hover {
+                color: #58a6ff;
+            }
+
+            .script-item {
+                border-color: rgba(255, 255, 255, 0.2);
+            }
+
+            .script-item:hover {
+                background-color: rgba(255, 255, 255, 0.05);
+            }
+
+            .script-name {
+                color: #58a6ff;
+            }
+
+            .script-meta {
+                color: #999;
+            }
+        }
+
+        @media print {
+            body {
+                max-width: none;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <article>
+        <header>
+            <h1>脚本目录</h1>
+            <p>素问相关二次开发脚本集合</p>
+        </header>
+
+        <hr>
+
+        <section>
+            <h2>油猴插件基础说明</h2>
+            
+            <h3>1. 安装 Tampermonkey</h3>
+            <p>在使用这些脚本之前，你需要先安装 Tampermonkey 浏览器扩展。</p>
+            <ul>
+                <li><strong>【推荐】Chrome：</strong><a href="https://chrome.google.com/webstore/detail/tampermonkey/dhdgffkkebhmkfjojejmpbldmpobfkfo" target="_blank">Chrome 网上应用店</a></li>
+                <li><strong>【推荐】Edge：</strong><a href="https://microsoftedge.microsoft.com/addons/detail/tampermonkey/iikmkjmpaadaobahmlepeloendndfphd" target="_blank">Microsoft Edge 加载项</a></li>
+                <li><strong>蓝奏云</strong><a href="https://wwua.lanzouo.com/ihSPG2z88h4f" target="_blank">蓝奏云下载</a></li>
+            </ul>
+            <h3>1.1 如何固定 Tampermonkey 到工具栏</h3>
+            <p>安装 Tampermonkey 后，建议点击拓展程序（拼图图标）将 Tampermonkey 固定到工具栏，方便后续使用：</p>
+            <ol>
+                <li>点击浏览器工具栏中的 Tampermonkey 图标</li>
+                <li>选择 <strong>"固定到工具栏"</strong></li>
+            </ol>
+            <figure>
+                <img src="assets/install-step-1.png" alt="Tampermonkey 固定到工具栏">
+                <figcaption>Tampermonkey 固定到工具栏</figcaption>
+            </figure>
+            <h3>2. 如何添加脚本</h3>
+            <p>安装 Tampermonkey 后，按照以下步骤添加脚本：</p>
+            <ol>
+                <li>点击浏览器工具栏中的 Tampermonkey 图标</li>
+                <li>选择 <strong>"创建新脚本..."</strong> 或 <strong>"添加新脚本..."</strong></li>
+                <li>在脚本编辑器中，删除默认内容</li>
+                <li>打开要安装的脚本文件（.user.js 文件），复制全部内容</li>
+                <li>将复制的内容粘贴到 Tampermonkey 脚本编辑器中</li>
+                <li>按 <code>Ctrl+S</code>（或 <code>Cmd+S</code>）保存脚本</li>
+                <li>脚本会自动启用，刷新目标网页即可生效</li>
+            </ol>
+            <figure>
+                <img src="assets/install-step-2.png" alt="添加脚本">
+                <figcaption>添加脚本</figcaption>
+            </figure>
+            <details>
+                <summary><strong>开启开发者模式（可选）</strong></summary>
+                <p>如果需要手动管理脚本文件，可以通过扩展管理页面开启浏览器的开发者模式：</p>
+                <ol>
+                    <li>访问扩展管理页面：
+                        <ul>
+                            <li>Chrome: <code>chrome://extensions/</code></li>
+                            <li>Edge: <code>edge://extensions/</code></li>
+                        </ul>
+                    </li>
+                    <li>在页面右上角或左侧找到并开启 <strong>"Developer mode"（开发者模式）</strong> 开关</li>
+                </ol>
+            </details>
+        </section>
+
+        <hr>
+
+        <section>
+            <h2>可用脚本</h2>
+            <ul class="script-list" id="script-list">
+                <li class="script-item">
+                    <a href="quick-edit/index.html">
+                        <div class="script-name">素问快捷编辑</div>
+                        <div class="script-meta">
+                            <span>📅 <span id="quick-edit-time">加载中...</span></span>
+                            <span>📦 <span id="quick-edit-size">加载中...</span></span>
+                        </div>
+                    </a>
+                </li>
+            </ul>
+        </section>
+
+        <hr>
+
+        <footer>
+            <p><a href="../index.html">← 返回首页</a></p>
+        </footer>
+    </article>
+
+    <script>
+        // 获取文件信息的函数
+        async function getFileInfo(filePath) {
+            try {
+                const response = await fetch(filePath, { method: 'HEAD' });
+                const size = response.headers.get('Content-Length');
+                const lastModified = response.headers.get('Last-Modified');
+                
+                return {
+                    size: size ? formatFileSize(parseInt(size)) : '未知',
+                    lastModified: lastModified ? formatDate(new Date(lastModified)) : '未知'
+                };
+            } catch (error) {
+                console.error('获取文件信息失败:', error);
+                return {
+                    size: '未知',
+                    lastModified: '未知'
+                };
+            }
+        }
+
+        // 格式化文件大小
+        function formatFileSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+        }
+
+        // 格式化日期
+        function formatDate(date) {
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            const hours = String(date.getHours()).padStart(2, '0');
+            const minutes = String(date.getMinutes()).padStart(2, '0');
+            return `${year}-${month}-${day} ${hours}:${minutes}`;
+        }
+
+        // 加载脚本信息
+        async function loadScriptInfo() {
+            const quickEditInfo = await getFileInfo('quick-edit/user.js');
+            document.getElementById('quick-edit-time').textContent = quickEditInfo.lastModified;
+            document.getElementById('quick-edit-size').textContent = quickEditInfo.size;
+        }
+
+        // 页面加载完成后获取文件信息
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', loadScriptInfo);
+        } else {
+            loadScriptInfo();
+        }
+    </script>
+</body>
+
+</html>
+
