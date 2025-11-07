@@ -198,6 +198,48 @@
         <hr>
 
         <section>
+            <h2>可用脚本</h2>
+            <ul class="script-list" id="script-list">
+                <li class="script-item">
+                    <a href="quick-edit/index.html">
+                        <div class="script-name">素问快捷编辑</div>
+                        <div class="script-meta">
+                            <span>📅 <span id="quick-edit-time">加载中...</span></span>
+                            <span>📦 <span id="quick-edit-size">加载中...</span></span>
+                        </div>
+                    </a>
+                </li>
+                <li class="script-item">
+                    <a href="copy-markdown-helper/index.html">
+                        <div class="script-name">Sooon.ai 多功能链接复制器</div>
+                        <div class="script-meta">
+                            <span>📅 <span id="copy-helper-time">加载中...</span></span>
+                            <span>📦 <span id="copy-helper-size">加载中...</span></span>
+                        </div>
+                    </a>
+                </li>
+                <li class="script-item">
+                    <a href="read-through-assist/index.html">
+                        <div class="script-name">素问通读助手</div>
+                        <div class="script-meta">
+                            <span>📅 <span id="read-assist-time">加载中...</span></span>
+                            <span>📦 <span id="read-assist-size">加载中...</span></span>
+                        </div>
+                    </a>
+                </li>
+                <li class="script-item">
+                    <a href="read-title-display/index.html">
+                        <div class="script-name">素问显示文章标题</div>
+                        <div class="script-meta">
+                            <span>📅 <span id="read-title-time">加载中...</span></span>
+                            <span>📦 <span id="read-title-size">加载中...</span></span>
+                        </div>
+                    </a>
+                </li>
+            </ul>
+        </section>
+        <hr>
+        <section>
             <h2>油猴插件基础说明</h2>
             
             <h3>1. 安装 Tampermonkey</h3>
@@ -205,7 +247,7 @@
             <ul>
                 <li><strong>【推荐】Chrome：</strong><a href="https://chrome.google.com/webstore/detail/tampermonkey/dhdgffkkebhmkfjojejmpbldmpobfkfo" target="_blank">Chrome 网上应用店</a></li>
                 <li><strong>【推荐】Edge：</strong><a href="https://microsoftedge.microsoft.com/addons/detail/tampermonkey/iikmkjmpaadaobahmlepeloendndfphd" target="_blank">Microsoft Edge 加载项</a></li>
-                <li><strong>蓝奏云</strong><a href="https://wwua.lanzouo.com/ihSPG2z88h4f" target="_blank">蓝奏云下载</a></li>
+                <li><a href="https://wwua.lanzouo.com/ihSPG2z88h4f" target="_blank">蓝奏云下载</a></li>
             </ul>
             <h3>1.1 如何固定 Tampermonkey 到工具栏</h3>
             <p>安装 Tampermonkey 后，建议点击拓展程序（拼图图标）将 Tampermonkey 固定到工具栏，方便后续使用：</p>
@@ -248,21 +290,6 @@
         </section>
 
         <hr>
-
-        <section>
-            <h2>可用脚本</h2>
-            <ul class="script-list" id="script-list">
-                <li class="script-item">
-                    <a href="quick-edit/index.html">
-                        <div class="script-name">素问快捷编辑</div>
-                        <div class="script-meta">
-                            <span>📅 <span id="quick-edit-time">加载中...</span></span>
-                            <span>📦 <span id="quick-edit-size">加载中...</span></span>
-                        </div>
-                    </a>
-                </li>
-            </ul>
-        </section>
 
         <hr>
 
@@ -314,6 +341,18 @@
             const quickEditInfo = await getFileInfo('quick-edit/user.js');
             document.getElementById('quick-edit-time').textContent = quickEditInfo.lastModified;
             document.getElementById('quick-edit-size').textContent = quickEditInfo.size;
+
+            const copyHelperInfo = await getFileInfo('copy-markdown-helper/user.js');
+            document.getElementById('copy-helper-time').textContent = copyHelperInfo.lastModified;
+            document.getElementById('copy-helper-size').textContent = copyHelperInfo.size;
+
+            const readAssistInfo = await getFileInfo('read-through-assist/user.js');
+            document.getElementById('read-assist-time').textContent = readAssistInfo.lastModified;
+            document.getElementById('read-assist-size').textContent = readAssistInfo.size;
+
+            const readTitleInfo = await getFileInfo('read-title-display/user.js');
+            document.getElementById('read-title-time').textContent = readTitleInfo.lastModified;
+            document.getElementById('read-title-size').textContent = readTitleInfo.size;
         }
 
         // 页面加载完成后获取文件信息

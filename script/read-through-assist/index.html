@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="light dark">
+    <title>素问通读助手 - 使用文档</title>
+    <style>
+        body {
+            margin: 1em auto;
+            max-width: 40em;
+            padding: 0 1.42em 3.24em;
+            font-size: 1.2em;
+            line-height: 1.62;
+        }
+
+        h1,
+        h2,
+        h3 {
+            line-height: 1.2;
+        }
+
+        code {
+            background: rgba(0, 0, 0, 0.05);
+            padding: 0.2em 0.4em;
+            border-radius: 3px;
+            font-size: 0.9em;
+        }
+
+        pre {
+            background: rgba(0, 0, 0, 0.05);
+            padding: 1em;
+            border-radius: 6px;
+            overflow-x: auto;
+        }
+
+        pre code {
+            background: none;
+            padding: 0;
+        }
+
+        details {
+            margin: 1.5em 0;
+            padding: 1em;
+            border: 1px solid rgba(0, 0, 0, 0.1);
+            border-radius: 6px;
+        }
+
+        summary {
+            cursor: pointer;
+            user-select: none;
+            margin-bottom: 0.5em;
+        }
+
+        summary:hover {
+            color: #0366d6;
+        }
+
+        a {
+            color: #0366d6;
+            text-decoration: none;
+        }
+
+        a:hover {
+            text-decoration: underline;
+        }
+
+        .download-btn {
+            display: inline-block;
+            background: #28a745;
+            color: white;
+            padding: 0.6em 1.2em;
+            border-radius: 6px;
+            font-weight: bold;
+            margin: 1em 0;
+        }
+
+        .download-btn:hover {
+            background: #218838;
+            text-decoration: none;
+        }
+
+        ol,
+        ul {
+            padding-left: 1.5em;
+        }
+
+        li {
+            margin: 0.5em 0;
+        }
+
+        hr {
+            border: none;
+            border-top: 1px solid rgba(0, 0, 0, 0.1);
+            margin: 2em 0;
+        }
+
+        figure {
+            text-align: center;
+            margin: 1em 0;
+        }
+
+        figure img {
+            max-width: 100%;
+            height: auto;
+        }
+
+        figure figcaption {
+            font-size: 0.8em;
+            color: #666;
+        }
+
+        .keyboard-shortcut {
+            display: inline-block;
+            background: rgba(0, 0, 0, 0.05);
+            padding: 0.2em 0.5em;
+            border-radius: 4px;
+            font-family: monospace;
+            font-weight: bold;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            body {
+                background: #1a1a1a;
+                color: #e0e0e0;
+            }
+
+            code,
+            pre {
+                background: rgba(255, 255, 255, 0.1);
+            }
+
+            a {
+                color: #58a6ff;
+            }
+
+            hr {
+                border-top-color: rgba(255, 255, 255, 0.1);
+            }
+
+            details {
+                border-color: rgba(255, 255, 255, 0.2);
+            }
+
+            summary:hover {
+                color: #58a6ff;
+            }
+
+            figure figcaption {
+                color: #999;
+            }
+
+            .keyboard-shortcut {
+                background: rgba(255, 255, 255, 0.1);
+            }
+        }
+
+        @media print {
+            body {
+                max-width: none;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <article>
+        <header>
+            <h1>素问通读助手</h1>
+            <p>提供键盘导航、文章过滤、自动翻页等功能，提升阅读和整理效率</p>
+        </header>
+
+        <hr>
+        <figure>
+            <img src="demo.png" alt="素问通读助手演示" style="max-width: 100%; height: auto;">
+            <figcaption>素问通读助手演示</figcaption>
+        </figure>
+        <hr>
+
+        <section>
+            <h2>下载脚本</h2>
+            <p>请先确保已安装 Tampermonkey 扩展，并了解如何添加脚本。如果还没有，请先查看 <a href="../index.html">脚本目录</a> 中的基础说明。</p>
+            <a href="user.js" download="素问通读助手.user.js" class="download-btn">📥 下载脚本文件</a>
+            <p><small>下载后，按照脚本目录中的说明将脚本添加到 Tampermonkey 中</small></p>
+        </section>
+
+        <hr>
+
+        <section>
+            <h2>功能说明</h2>
+            <h3>1. 键盘导航</h3>
+            <ul>
+                <li><span class="keyboard-shortcut">A</span> / <span class="keyboard-shortcut">D</span>：在文章列表中左右切换（上一篇文章/下一篇文章）</li>
+                <li><span class="keyboard-shortcut">F</span>：打开当前聚焦的文章</li>
+                <li><span class="keyboard-shortcut">W</span> / <span class="keyboard-shortcut">S</span>：在文章弹窗中上下滚动内容</li>
+                <li><span class="keyboard-shortcut">Q</span>：关闭文章弹窗，或在列表页面时翻到上一页</li>
+                <li><span class="keyboard-shortcut">E</span>：翻到下一页</li>
+                <!-- <li><span class="keyboard-shortcut">R</span>：打开/关闭编辑抽屉（用于添加标签）</li>
+                <li><span class="keyboard-shortcut">1-9</span>：在编辑抽屉中切换收藏夹（1-9 对应前 9 个收藏夹）</li> -->
+            </ul>
+
+            <h3>2. 文章过滤</h3>
+            <ul>
+                <li>根据阅读量自动隐藏已读文章</li>
+                <li>可设置过滤阈值（FC），隐藏阅读量大于等于该值的文章</li>
+                <li>显示阅读进度百分比</li>
+                <li>支持暂停过滤（设置 FC 为 0）</li>
+            </ul>
+
+            <h3>3. 自动翻页</h3>
+            <ul>
+                <li>当列表为空时自动翻页</li>
+                <li>可设置翻页方向（上一页/下一页）</li>
+                <li>可设置检测间隔（1-60 秒）</li>
+            </ul>
+
+            <h3>4. 页面状态保存</h3>
+            <ul>
+                <li>自动保存当前页面、排序方式等状态</li>
+                <li>刷新后自动恢复到上次浏览的页面</li>
+            </ul>
+        </section>
+
+        <hr>
+
+        <section>
+            <h2>使用方法</h2>
+            <h3>基础操作</h3>
+            <ol>
+                <li>访问 Sooon.ai 的已发布文章列表页面</li>
+                <li>使用键盘快捷键进行导航和操作</li>
+                <li>当前聚焦的文章会显示橙色高亮边框</li>
+            </ol>
+
+            <h3>配置选项</h3>
+            <p>点击 Tampermonkey 图标，在菜单中可以配置：</p>
+            <ul>
+                <li><strong>🔍 设置过滤阈值 (FC)</strong>：设置阅读量过滤阈值，0 表示暂停过滤</li>
+                <li><strong>🔄 设置自动翻页方向</strong>：选择自动翻页时是向前还是向后</li>
+                <li><strong>⏱️ 设置自动翻页检测间隔</strong>：设置列表为空后多久自动翻页（1-60 秒）</li>
+            </ul>
+        </section>
+
+        <hr>
+
+        <section>
+            <h2>使用场景</h2>
+            <ul>
+                <li><strong>快速浏览</strong>：使用键盘快捷键快速浏览大量文章</li>
+                <li><strong>筛选未读</strong>：通过设置过滤阈值，只显示未读或低阅读量的文章</li>
+                <li><strong>批量整理</strong>：结合键盘导航和编辑功能，快速为文章添加标签</li>
+                <li><strong>自动处理</strong>：开启自动翻页，让脚本自动处理已读文章</li>
+            </ul>
+        </section>
+
+        <hr>
+
+        <section>
+            <h2>注意事项</h2>
+            <ul>
+                <li>键盘快捷键仅在非输入框区域生效</li>
+                <li>过滤功能会隐藏符合条件的文章，但不会删除</li>
+                <li>阅读进度统计基于总文章数和已过滤文章数</li>
+                <li>页面状态保存在浏览器本地存储中</li>
+            </ul>
+        </section>
+
+        <hr>
+
+        <footer>
+            <p><a href="../index.html">← 返回脚本目录</a></p>
+            <p><small>Version 1.1.0 | MIT License</small></p>
+        </footer>
+    </article>
+</body>
+
+</html>
+
