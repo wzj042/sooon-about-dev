@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="light dark">
+    <title>素问快捷编辑 - 使用文档</title>
+    <style>
+        body {
+            margin: 1em auto;
+            max-width: 40em;
+            padding: 0 1.42em 3.24em;
+            font-size: 1.2em;
+            line-height: 1.62;
+        }
+
+        h1,
+        h2,
+        h3 {
+            line-height: 1.2;
+        }
+
+        code {
+            background: rgba(0, 0, 0, 0.05);
+            padding: 0.2em 0.4em;
+            border-radius: 3px;
+            font-size: 0.9em;
+        }
+
+        pre {
+            background: rgba(0, 0, 0, 0.05);
+            padding: 1em;
+            border-radius: 6px;
+            overflow-x: auto;
+        }
+
+        pre code {
+            background: none;
+            padding: 0;
+        }
+
+        details {
+            margin: 1.5em 0;
+            padding: 1em;
+            border: 1px solid rgba(0, 0, 0, 0.1);
+            border-radius: 6px;
+        }
+
+        summary {
+            cursor: pointer;
+            user-select: none;
+            margin-bottom: 0.5em;
+        }
+
+        summary:hover {
+            color: #0366d6;
+        }
+
+        a {
+            color: #0366d6;
+            text-decoration: none;
+        }
+
+        a:hover {
+            text-decoration: underline;
+        }
+
+        .install-btn {
+            display: inline-block;
+            background: #28a745;
+            color: white;
+            padding: 0.6em 1.2em;
+            border-radius: 6px;
+            font-weight: bold;
+            margin: 1em 0;
+        }
+
+        .install-btn:hover {
+            background: #218838;
+            text-decoration: none;
+        }
+
+        ol,
+        ul {
+            padding-left: 1.5em;
+        }
+
+        li {
+            margin: 0.5em 0;
+        }
+
+        hr {
+            border: none;
+            border-top: 1px solid rgba(0, 0, 0, 0.1);
+            margin: 2em 0;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            body {
+                background: #1a1a1a;
+                color: #e0e0e0;
+            }
+
+            code,
+            pre {
+                background: rgba(255, 255, 255, 0.1);
+            }
+
+            a {
+                color: #58a6ff;
+            }
+
+            hr {
+                border-top-color: rgba(255, 255, 255, 0.1);
+            }
+
+            details {
+                border-color: rgba(255, 255, 255, 0.2);
+            }
+
+            summary:hover {
+                color: #58a6ff;
+            }
+        }
+
+        @media print {
+            body {
+                max-width: none;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <article>
+        <header>
+            <h1>素问快捷编辑</h1>
+            <p>在 Sooon.ai 文章弹窗中注入快捷编辑按钮，恢复直接编辑和关闭的体验</p>
+        </header>
+
+        <hr>
+        <figure style="text-align: center;">
+            <img src="demo.gif" alt="素问快捷编辑演示" style="max-width: 100%; height: auto;">
+            <figcaption style="font-size: 0.8em; color: #666;">素问快捷编辑演示</figcaption>
+        </figure>
+        <hr>
+        <section>
+            <h2>安装脚本</h2>
+            <a href="user.js" class="install-btn">点击安装脚本</a>
+            <p><small>点击后 Tampermonkey 会自动提示安装</small></p>
+            
+            <details>
+                <summary><strong>本地开发说明</strong></summary>
+                <p>如果你想在本地测试脚本，需要通过 HTTP 服务器访问：</p>
+                <ol>
+                    <li>在项目根目录运行 HTTP 服务器：
+                        <pre><code># Python 3
+python -m http.server 8000
+
+# 或使用 Node.js
+npx http-server -p 8000</code></pre>
+                    </li>
+                    <li>在浏览器中访问：<br>
+                        <code>http://localhost:8000/script/quick-edit/index.html</code>
+                    </li>
+                    <li>点击"安装脚本"按钮即可触发 Tampermonkey 安装提示</li>
+                </ol>
+                <p><em>注意：直接打开本地 HTML 文件（file:// 协议）时，需要在扩展管理中开启"允许访问文件网址"</em></p>
+            </details>
+        </section>
+
+        <hr>
+
+        <section>
+            <h2>前置要求</h2>
+            <h3>1. 安装 Tampermonkey</h3>
+            <p>在使用这些脚本之前，你需要先安装 Tampermonkey 浏览器扩展。</p>
+            <ul>
+                <li><strong>Chrome：</strong><a href="https://chrome.google.com/webstore/detail/tampermonkey/dhdgffkkebhmkfjojejmpbldmpobfkfo" target="_blank">Chrome 网上应用店</a></li>
+                <li><strong>Edge：</strong><a href="https://microsoftedge.microsoft.com/addons/detail/tampermonkey/iikmkjmpaadaobahmlepeloendndfphd" target="_blank">Microsoft Edge 加载项</a></li>
+            </ul>
+
+            <h3>2. 开启开发者模式</h3>
+            <p>通过扩展管理页面开启浏览器的开发者模式：</p>
+            <ol>
+                <li>访问扩展管理页面：
+                    <ul>
+                        <li>Chrome: <code>chrome://extensions/</code></li>
+                        <li>Edge: <code>edge://extensions/</code></li>
+                    </ul>
+                </li>
+                <li>在页面右上角或左侧找到并开启 <strong>"Developer mode"（开发者模式）</strong> 开关</li>
+            </ol>
+        </section>
+
+        <hr>
+
+        <section>
+            <h2>功能说明</h2>
+            <ul>
+                <li>在文章弹窗的工具栏中添加 ✏️ 快捷编辑按钮</li>
+                <li>点击后自动打开"我的编辑"界面</li>
+                <li>编辑完成后自动关闭所有相关弹窗</li>
+                <li>支持 <code>https://sooon.ai/*</code> 所有页面</li>
+            </ul>
+        </section>
+
+        <hr>
+
+        <footer>
+            <p><a href="../../index.html">← 返回首页</a></p>
+            <p><small>Version 1.3.0 | MIT License</small></p>
+        </footer>
+    </article>
+</body>
+
+</html>
