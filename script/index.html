@@ -329,9 +329,6 @@
 
         // 加载脚本信息
         async function loadScriptInfo() {
-            const quickEditInfo = await getFileInfo('quick-edit/user.js');
-            document.getElementById('quick-edit-time').textContent = quickEditInfo.lastModified;
-            document.getElementById('quick-edit-size').textContent = quickEditInfo.size;
 
             const copyHelperInfo = await getFileInfo('copy-markdown-helper/user.js');
             document.getElementById('copy-helper-time').textContent = copyHelperInfo.lastModified;

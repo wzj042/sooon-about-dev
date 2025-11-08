@@ -158,6 +158,48 @@
             <p>复制链接时，可以选择复制 Markdown 格式或纯链接格式，以及来源和素问的链接</p>
         </header>
 
+        <style>
+            .admonition-warning {
+                display: flex;
+                align-items: flex-start;
+                gap: 0.7em;
+                padding: 1em 1.2em 1em 1.1em;
+                margin: 1.4em 0;
+                border-left: 5px solid #ffc107;
+                background: rgba(255, 237, 169, 0.30);
+                border-radius: 5px;
+                font-size: 1em;
+            }
+            .admonition-warning-icon {
+                color: #d59b00;
+                font-size: 1.4em;
+                flex-shrink: 0;
+                padding-top: 0.1em;
+                user-select: none;
+            }
+            .admonition-warning strong {
+                color: #a07b09;
+                font-weight: 600;
+            }
+            @media (prefers-color-scheme: dark) {
+                .admonition-warning {
+                    background: rgba(85, 70, 15, 0.21);
+                    border-left-color: #ffdf7a;
+                }
+                .admonition-warning strong {
+                    color: #ffe28d;
+                }
+                .admonition-warning-icon {
+                    color: #ffd758;
+                }
+            }
+        </style>
+        <div class="admonition-warning">
+            <span class="admonition-warning-icon" aria-hidden="true">⚠️</span>
+            <div>
+                <strong>注意：</strong>当前在非主页下获取的链接可能存在异常，如顺序阅读下打开的文章可能会意外的复制顺序阅读的当前页面链接，考虑修复中
+            </div>
+        </div>
         <hr>
         <figure>
             <img src="demo.png" alt="多功能链接复制器演示" style="max-width: 100%; height: auto;">
