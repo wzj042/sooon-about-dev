@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Sooon.ai 多功能链接复制器 
 // @namespace    http://tampermonkey.net/
-// @version      5.4
-// @description  修复悬浮按钮检索来源问题
+// @version      5.5
+// @description  修复弹窗加载延迟导致加载慢的问题
 // @author       Gemini (Based on user feedback & repair)
 // @match        https://sooon.ai/**
 // @grant        GM_registerMenuCommand
@@ -13,9 +13,9 @@
 
 (function() {
     'use strict';
-    console.log('[Sooon Copier] Script loading... (v5.3 unsafeWindow Fix)');
+    console.log('[Sooon Copier] Script loading... (v5.4 Fast Load Fix)');
 
-    // --- 配置和状态管理 (无变化) ---
+    // --- 配置和状态管理 ---
     const COPY_MODE_KEY = 'SOOON_COPY_MODE';
     const MODE_MARKDOWN = 'markdown';
     const MODE_SIMPLE = 'simple';
@@ -26,7 +26,7 @@
     function getCopyMode() { return localStorage.getItem(COPY_MODE_KEY) || MODE_MARKDOWN; }
     function setCopyMode(mode) { localStorage.setItem(COPY_MODE_KEY, mode); }
 
-    // --- 核心功能函数 (无变化) ---
+    // --- 核心功能函数 ---
     function parseSharedContent(clipboardText) {
         try {
             const lines = clipboardText.trim().split('\n').filter(line => line.trim() !== '');
@@ -68,23 +68,19 @@
         const triggerButton = findTargetShareButton(modal, '.flex.items-center.px-4.pb-2');
         if (!triggerButton) { console.error("[Sooon Copier] 错误：点击时无法定位到底部工具栏的原始复制按钮！"); return; }
 
-        console.log('[Sooon Copier] 定位到触发悬停的按钮:', triggerButton);
-
-        // 【核心修复】使用 unsafeWindow 来创建 MouseEvent，以确保事件的 'view' 属性是页面真实的 window 对象
+        // 使用 unsafeWindow 确保事件正确触发
         triggerButton.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, cancelable: true, view: unsafeWindow }));
 
         try {
-            const buttonTextToFind = targetType === 'sooon' ? '素问' : '知乎';
-            console.log(`[Sooon Copier] 正在查找包含文本 "${buttonTextToFind}" 的按钮...`);
+            const buttonTextToFind = targetType === 'sooon' ? '素问' : '来源';
             let targetButtonClickable = null;
             for (let i = 0; i < 20; i++) {
                 await new Promise(resolve => setTimeout(resolve, 100));
                 const dialogs = document.querySelectorAll('div[role="dialog"]');
                 if (dialogs.length > 0) {
                     const hoverDialog = dialogs[dialogs.length-1];
-                    const backup = '爱发电';
                     const buttons = hoverDialog.querySelectorAll('button');
-                    for (const btn of buttons) { if (btn.textContent.trim().includes(buttonTextToFind) || btn.textContent.trim().includes(backup)) { targetButtonClickable = btn; break; } }
+                    for (const btn of buttons) { if (btn.textContent.trim().includes(buttonTextToFind)) { targetButtonClickable = btn; break; } }
                 }
                 if (targetButtonClickable) break;
             }
@@ -93,11 +89,9 @@
                  return;
             }
 
-            console.log('[Sooon Copier] 找到并准备点击目标按钮:', targetButtonClickable);
             targetButtonClickable.click();
             await new Promise(resolve => setTimeout(resolve, 200));
             const rawText = await navigator.clipboard.readText();
-            console.log('[Sooon Copier] 从剪贴板读取到内容:\n---', rawText, '\n---');
             const data = parseSharedContent(rawText);
             if (!data || !data.title) { console.error("[Sooon Copier] 无法从剪贴板内容中解析出有效数据。"); return; }
             const mode = getCopyMode();
@@ -109,27 +103,27 @@
                 textToCopy = mode === MODE_MARKDOWN ? `[${data.title}](${data.otherUrl} "${data.question}")` : data.otherUrl;
             }
             await navigator.clipboard.writeText(textToCopy);
-            console.log(`[Sooon Copier] 已将格式化后的链接复制到剪贴板:`, textToCopy);
+            console.log(`[Sooon Copier] 已复制:`, textToCopy);
             const originalContent = buttonElement.querySelector('span').innerHTML;
             buttonElement.querySelector('span').innerHTML = '✔';
             setTimeout(() => { if (buttonElement && buttonElement.querySelector('span')) { buttonElement.querySelector('span').innerHTML = originalContent; } }, 2000);
         } catch (err) { console.error("[Sooon Copier] 复制操作失败:", err);
         } finally {
-            // 【核心修复】同样，清理操作也需要使用 unsafeWindow
             triggerButton.dispatchEvent(new MouseEvent('mouseout', { bubbles: true, cancelable: true, view: unsafeWindow }));
         }
     }
 
-    // --- UI 注入和菜单设置 (无变化) ---
+    // --- UI 注入 ---
 
+    // 返回值：true 表示注入成功或已存在，false 表示还没找到插入点
     function injectButton(modal) {
-        if (modal.querySelector(`#${BTN1_ID}`)) { return; }
+        if (modal.querySelector(`#${BTN1_ID}`)) { return true; } // 已经存在，视为成功
         const shareButton = findTargetShareButton(modal, '.flex.items-center.px-4.pb-2');
-        if (!shareButton) { return; }
+        if (!shareButton) { return false; } // 还没加载出来
 
-        console.log('[Sooon Copier] 成功匹配文章弹窗，准备注入按钮...');
+        console.log('[Sooon Copier] 发现工具栏，正在注入按钮...');
         const buttonContainer = shareButton.parentElement;
-        if (!buttonContainer) { console.error('[Sooon Copier] 致命错误：找到了按钮但找不到其父容器。'); return; }
+        if (!buttonContainer) { return false; }
 
         const createButton = (id, text, clickHandler) => {
             const btn = shareButton.cloneNode(true);
@@ -152,6 +146,7 @@
         buttonContainer.insertBefore(sooonButton, shareButton);
         buttonContainer.insertBefore(sourceButton, shareButton);
         console.log('%c[Sooon Copier] 自定义复制按钮注入成功！', 'color: green; font-weight: bold;');
+        return true;
     }
 
     function updateMenu() {
@@ -166,7 +161,29 @@
         });
     }
 
-    // --- 脚本启动入口 (无变化) ---
+    // --- 脚本启动入口 ---
+
+    // 新增：轮询注入机制，替代旧的 setTimeout
+    function tryInjectUntilSuccess(modal) {
+        let attempts = 0;
+        const maxAttempts = 50; // 50 * 100ms = 5秒超时
+
+        // 立即尝试一次
+        if (injectButton(modal)) return;
+
+        const intervalId = setInterval(() => {
+            attempts++;
+            const success = injectButton(modal);
+
+            // 如果成功，或者模态框被关闭了(不在文档中)，停止检测
+            if (success || !document.body.contains(modal)) {
+                clearInterval(intervalId);
+            } else if (attempts >= maxAttempts) {
+                clearInterval(intervalId);
+                console.log('[Sooon Copier] 注入超时：工具栏未在 5 秒内出现');
+            }
+        }, 100); // 每 100ms 检查一次
+    }
 
     updateMenu();
     console.log('[Sooon Copier] 初始化 MutationObserver...');
@@ -177,7 +194,8 @@
                     if (node.nodeType === Node.ELEMENT_NODE) {
                         const modal = node.matches && node.matches('section[role="dialog"]') ? node : node.querySelector('section[role="dialog"]');
                         if (modal) {
-                            setTimeout(() => injectButton(modal), 900);
+                            // 【核心修复】不再死等900ms，而是启动轮询检测
+                            tryInjectUntilSuccess(modal);
                         }
                     }
                 });
