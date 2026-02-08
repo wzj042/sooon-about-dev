@@ -138,6 +138,38 @@
             font-size: 0.9em;
         }
 
+        .demo-section {
+            background: var(--card-bg);
+            border-radius: 12px;
+            padding: 32px;
+            border: 1px solid var(--border-color);
+            margin-bottom: 32px;
+            text-align: center;
+        }
+
+        .demo-section h3 {
+            margin-bottom: 20px;
+            font-size: 1.4rem;
+            color: var(--text-main);
+        }
+
+        .demo-section figure {
+            margin: 0;
+        }
+
+        .demo-section img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .demo-section figcaption {
+            margin-top: 12px;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
         .version-info {
             text-align: center;
             margin-top: 40px;
@@ -263,6 +295,14 @@
                 <h3><span class="icon">🎛️</span> 模式切换</h3>
                 <p>支持通过油猴菜单在列表模式和瀑布流模式之间切换。</p>
             </div>
+        </div>
+
+        <div class="demo-section">
+            <h3>📸 效果演示</h3>
+            <figure>
+                <img src="demo.png" alt="素问聚焦顺序阅读效果演示">
+                <figcaption>列表模式效果展示：垂直布局 + 时间排序</figcaption>
+            </figure>
         </div>
 
         <div class="guide">
