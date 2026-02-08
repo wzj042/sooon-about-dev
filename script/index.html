@@ -233,6 +233,15 @@
             </p>
             <ul class="script-list" id="script-list">
                 <li class="script-item">
+                    <a href="daily_reward_catch/index.html">
+                        <div class="script-name">素问打卡奖励截图工具 - 油猴脚本</div>
+                        <div class="script-meta">
+                            <span>📅 <span id="daily_reward_catch-time">加载中...</span></span>
+                            <span>📦 <span id="daily_reward_catch-size">加载中...</span></span>
+                        </div>
+                    </a>
+                </li>
+                <li class="script-item">
                     <a href="temp-vec-list/index.html">
                         <div class="script-name">素问聚焦顺序阅读 - 油猴脚本</div>
                         <div class="script-meta">
@@ -370,19 +379,23 @@
 
         // 加载脚本信息
                 async function loadScriptInfo() {
-            const tempveclistInfo = await getFileInfo('temp-vec-list/user.js');
+            const daily_reward_catchInfo = await getFileInfo('daily_reward_catch/script.user.js');
+            document.getElementById('daily_reward_catch-time').textContent = daily_reward_catchInfo.lastModified;
+            document.getElementById('daily_reward_catch-size').textContent = daily_reward_catchInfo.size;
+
+            const tempveclistInfo = await getFileInfo('temp-vec-list/script.user.js');
             document.getElementById('tempveclist-time').textContent = tempveclistInfo.lastModified;
             document.getElementById('tempveclist-size').textContent = tempveclistInfo.size;
 
-            const readthroughassistInfo = await getFileInfo('read-through-assist/user.js');
+            const readthroughassistInfo = await getFileInfo('read-through-assist/script.user.js');
             document.getElementById('readthroughassist-time').textContent = readthroughassistInfo.lastModified;
             document.getElementById('readthroughassist-size').textContent = readthroughassistInfo.size;
 
-            const readtitledisplayInfo = await getFileInfo('read-title-display/user.js');
+            const readtitledisplayInfo = await getFileInfo('read-title-display/script.user.js');
             document.getElementById('readtitledisplay-time').textContent = readtitledisplayInfo.lastModified;
             document.getElementById('readtitledisplay-size').textContent = readtitledisplayInfo.size;
 
-            const copymarkdownhelperInfo = await getFileInfo('copy-markdown-helper/user.js');
+            const copymarkdownhelperInfo = await getFileInfo('copy-markdown-helper/script.user.js');
             document.getElementById('copymarkdownhelper-time').textContent = copymarkdownhelperInfo.lastModified;
             document.getElementById('copymarkdownhelper-size').textContent = copymarkdownhelperInfo.size;
 

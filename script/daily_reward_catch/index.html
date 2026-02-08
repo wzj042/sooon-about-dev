@@ -3,11 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>素问聚焦顺序阅读 - 油猴脚本</title>
+    <title>素问打卡奖励截图工具 - 油猴脚本</title>
     <style>
         :root {
-            --primary-color: #6366f1;
-            --primary-hover: #4f46e5;
+            --primary-color: #10b981;
+            --primary-hover: #059669;
             --bg-color: #f8fafc;
             --card-bg: #ffffff;
             --text-main: #1e293b;
@@ -70,13 +70,13 @@
             font-size: 1.2rem;
             font-weight: 600;
             transition: all 0.2s;
-            box-shadow: 0 4px 14px 0 rgba(99, 102, 241, 0.39);
+            box-shadow: 0 4px 14px 0 rgba(16, 185, 129, 0.39);
         }
 
         .install-btn:hover {
             background: var(--primary-hover);
             transform: translateY(-2px);
-            box-shadow: 0 6px 20px 0 rgba(99, 102, 241, 0.23);
+            box-shadow: 0 6px 20px 0 rgba(16, 185, 129, 0.23);
         }
 
         .features {
@@ -137,6 +137,30 @@
             font-size: 0.9em;
         }
 
+        .step-preview {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 12px;
+            padding: 24px;
+            color: white;
+            margin-bottom: 32px;
+        }
+
+        .step-preview h3 {
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .step-preview ol {
+            padding-left: 24px;
+        }
+
+        .step-preview li {
+            margin-bottom: 8px;
+            opacity: 0.95;
+        }
+
         .version-info {
             text-align: center;
             margin-top: 40px;
@@ -167,8 +191,8 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>📜 素问聚焦顺序阅读</h1>
-            <p class="subtitle">优化素问阅读体验的油猴脚本</p>
+            <h1>📸 素问打卡奖励截图工具</h1>
+            <p class="subtitle">一键生成打卡奖励分享长图</p>
         </div>
 
         <div class="install-card">
@@ -180,41 +204,51 @@
             </p>
         </div>
 
+        <div class="step-preview">
+            <h3>🎯 使用流程</h3>
+            <ol>
+                <li>在素问完成每日打卡，获得打卡奖励</li>
+                <li>等待打卡奖励弹窗出现</li>
+                <li>点击右下角 <strong>"生成分享长图"</strong> 按钮</li>
+                <li>截图将自动下载为 PNG 图片</li>
+            </ol>
+        </div>
+
         <div class="features">
-            <div class="feature-card" style="background-color:goldenrod;">
-                <h3 style="color: white"><span class="icon">⚠️</span> 列表闪烁问题</h3>
-                <p style="color: white">当前存在列表闪烁问题，滑动列表到一定深度时会出现列表无法下滑、闪烁的情况，建议只看前几天的内容。</p>
+            <div class="feature-card">
+                <h3><span class="icon">🎯</span> 智能检测</h3>
+                <p>自动检测打卡奖励弹窗，只在需要时显示截图按钮，不影响正常浏览。</p>
             </div>
 
             <div class="feature-card">
-                <h3><span class="icon">📏</span> 宽度自适应</h3>
-                <p>将瀑布流布局转换为垂直列表，最大宽度 900px 居中显示，解决宽度不足问题。</p>
+                <h3><span class="icon">📷</span> 长图生成</h3>
+                <p>使用 html2canvas 技术，完整截取奖励内容区域，生成高质量长图。</p>
             </div>
 
             <div class="feature-card">
-                <h3><span class="icon">⏰</span> 时间排序</h3>
-                <p>按发布时间智能排序：今日 → 昨天 → 天前，让你不错过最新内容。</p>
+                <h3><span class="icon">⚡</span> 一键操作</h3>
+                <p>点击按钮即可生成并自动下载，无需手动截屏和编辑，方便分享。</p>
             </div>
 
             <div class="feature-card">
-                <h3><span class="icon">🎛️</span> 模式切换</h3>
-                <p>支持通过油猴菜单在列表模式和瀑布流模式之间切换。</p>
+                <h3><span class="icon">🎨</span> 高清输出</h3>
+                <p>2倍分辨率输出，白色背景，确保截图清晰美观，适合社交媒体分享。</p>
             </div>
         </div>
 
         <div class="guide">
-            <h2>📖 使用说明</h2>
+            <h2>📖 安装使用说明</h2>
             <ol>
                 <li>确保已安装 <a href="https://www.tampermonkey.net/" target="_blank" style="color: var(--primary-color);">Tampermonkey</a> 浏览器扩展</li>
                 <li>点击上方 <strong>一键安装</strong> 按钮</li>
-                <li>在弹出的Tampermonkey页面中点击 <strong>安装</strong></li>
-                <li>访问 <code>https://sooon.ai/home/read/feed</code> 即可自动生效</li>
-                <li>如需切换模式，点击扩展图标 → 油猴菜单 → 选择切换选项</li>
+                <li>在弹出的 Tampermonkey 页面中点击 <strong>安装</strong></li>
+                <li>访问 <code>https://sooon.ai</code> 完成每日打卡</li>
+                <li>打卡奖励弹窗出现后，点击右下角绿色按钮即可生成长图</li>
             </ol>
         </div>
 
         <div class="version-info">
-            <p>版本：1.2 | 适用网站：sooon.ai</p>
+            <p>版本：1.0 | 适用网站：sooon.ai</p>
         </div>
     </div>
 </body>

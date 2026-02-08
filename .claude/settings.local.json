@@ -6,7 +6,9 @@
       "Bash(pnpm add:*)",
       "Bash(pnpm exec husky init:*)",
       "Bash(chmod:*)",
-      "Bash(pnpm generate-script-list:*)"
+      "Bash(pnpm generate-script-list:*)",
+      "Bash(ls:*)",
+      "Bash(node tools/generate-script-list.mjs:*)"
     ]
   }
 }

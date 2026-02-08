@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * 自动生成 script/index.html 的脚本列表
- * 扫描 script 目录下所有包含 user.js 的文件夹，并更新列表
+ * 扫描 script 目录下所有包含 script.user.js 的文件夹，并更新列表
  */
 
 import fs from 'fs';
@@ -23,7 +23,7 @@ function extractTitle(htmlContent) {
 // 生成脚本项的 HTML
 function generateScriptItem(name, dirName, hasIndex) {
     const idSuffix = dirName.replace(/-/g, '');
-    const href = hasIndex ? `${dirName}/index.html` : `${dirName}/user.js`;
+    const href = hasIndex ? `${dirName}/index.html` : `${dirName}/script.user.js`;
     const linkText = hasIndex ? name : `📥 直接下载: ${name}`;
 
     return `                <li class="script-item">
@@ -55,10 +55,10 @@ function scanScriptDirectory() {
         if (entry.name === 'archive' || entry.name.startsWith('.')) continue;
 
         const dirPath = path.join(SCRIPT_DIR, entry.name);
-        const userJsPath = path.join(dirPath, 'user.js');
+        const userJsPath = path.join(dirPath, 'script.user.js');
         const indexPath = path.join(dirPath, 'index.html');
 
-        // 必须包含 user.js
+        // 必须包含 script.user.js
         if (!fs.existsSync(userJsPath)) continue;
 
         let scriptName = entry.name;
@@ -132,7 +132,7 @@ function generateLoadScriptInfo(scripts) {
 
     for (const script of scripts) {
         const idSuffix = script.dirName.replace(/-/g, '');
-        const userJsPath = `${script.dirName}/user.js`;
+        const userJsPath = `${script.dirName}/script.user.js`;
 
         lines.push(`            const ${idSuffix}Info = await getFileInfo('${userJsPath}');`);
         lines.push(`            document.getElementById('${idSuffix}-time').textContent = ${idSuffix}Info.lastModified;`);
