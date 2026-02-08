@@ -214,6 +214,39 @@
                 border-color: rgba(255, 255, 255, 0.2);
             }
         }
+
+        .install-notice {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 1.2em 1.5em;
+            border-radius: 8px;
+            margin: 1.5em 0;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+        }
+
+        .install-notice h3 {
+            margin: 0 0 0.5em 0;
+            font-size: 1.1em;
+            display: flex;
+            align-items: center;
+            gap: 0.5em;
+        }
+
+        .install-notice p {
+            margin: 0;
+            font-size: 0.95em;
+            opacity: 0.95;
+        }
+
+        .install-notice a {
+            color: #ffd700;
+            text-decoration: underline;
+            font-weight: 500;
+        }
+
+        .install-notice a:hover {
+            color: #ffed4e;
+        }
     </style>
 </head>
 
@@ -224,13 +257,15 @@
             <p>素问相关二次开发脚本集合</p>
         </header>
 
+        <div class="install-notice">
+            <h3>📖 安置配置教程推荐</h3>
+            <p>首次使用？建议查看 <a href="https://zhuanlan.zhihu.com/p/646778290" target="_blank" rel="noopener">油猴插件详细配置步骤（知乎）</a>，学习如何从 0-1 安装插件和脚本（含视频教程）</p>
+        </div>
+
         <hr>
 
         <section>
             <h2>可用脚本</h2>
-            <p class="tutorial-hint">
-                📖 安装配置教程推荐（含从0-1安装插件，脚本的视频）：<a href="https://zhuanlan.zhihu.com/p/1994564848151988044" target="_blank" rel="noopener">油猴插件详细配置步骤（知乎）</a>
-            </p>
             <ul class="script-list" id="script-list">
                 <li class="script-item">
                     <a href="daily_reward_catch/index.html">
