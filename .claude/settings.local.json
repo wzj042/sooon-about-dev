@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pnpm init:*)",
+      "Bash(Out-File -Encoding UTF8 package.json)",
+      "Bash(pnpm add:*)",
+      "Bash(pnpm exec husky init:*)",
+      "Bash(chmod:*)",
+      "Bash(pnpm generate-script-list:*)"
+    ]
+  }
+}

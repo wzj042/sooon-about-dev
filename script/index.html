@@ -185,6 +185,35 @@
                 max-width: none;
             }
         }
+
+        .tutorial-hint {
+            font-size: 0.9em;
+            color: #666;
+        }
+
+        .tutorial-hint a {
+            color: #0366d6;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            .tutorial-hint a {
+                color: #58a6ff;
+            }
+        }
+
+        .tutorial-iframe {
+            width: 100%;
+            height: 500px;
+            border: 1px solid rgba(0, 0, 0, 0.1);
+            border-radius: 6px;
+            margin: 1em 0;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            .tutorial-iframe {
+                border-color: rgba(255, 255, 255, 0.2);
+            }
+        }
     </style>
 </head>
 
@@ -199,31 +228,43 @@
 
         <section>
             <h2>可用脚本</h2>
+            <p class="tutorial-hint">
+                📖 安装配置教程推荐（含从0-1安装插件，脚本的视频）：<a href="https://zhuanlan.zhihu.com/p/1994564848151988044" target="_blank" rel="noopener">油猴插件详细配置步骤（知乎）</a>
+            </p>
             <ul class="script-list" id="script-list">
                 <li class="script-item">
-                    <a href="copy-markdown-helper/index.html">
-                        <div class="script-name">Sooon.ai 多功能链接复制器</div>
+                    <a href="temp-vec-list/index.html">
+                        <div class="script-name">素问聚焦顺序阅读 - 油猴脚本</div>
                         <div class="script-meta">
-                            <span>📅 <span id="copy-helper-time">加载中...</span></span>
-                            <span>📦 <span id="copy-helper-size">加载中...</span></span>
+                            <span>📅 <span id="tempveclist-time">加载中...</span></span>
+                            <span>📦 <span id="tempveclist-size">加载中...</span></span>
                         </div>
                     </a>
                 </li>
                 <li class="script-item">
                     <a href="read-through-assist/index.html">
-                        <div class="script-name">素问通读助手</div>
+                        <div class="script-name">素问通读助手 - 使用文档</div>
                         <div class="script-meta">
-                            <span>📅 <span id="read-assist-time">加载中...</span></span>
-                            <span>📦 <span id="read-assist-size">加载中...</span></span>
+                            <span>📅 <span id="readthroughassist-time">加载中...</span></span>
+                            <span>📦 <span id="readthroughassist-size">加载中...</span></span>
                         </div>
                     </a>
                 </li>
                 <li class="script-item">
                     <a href="read-title-display/index.html">
-                        <div class="script-name">素问显示文章标题</div>
+                        <div class="script-name">素问显示文章标题 - 使用文档</div>
                         <div class="script-meta">
-                            <span>📅 <span id="read-title-time">加载中...</span></span>
-                            <span>📦 <span id="read-title-size">加载中...</span></span>
+                            <span>📅 <span id="readtitledisplay-time">加载中...</span></span>
+                            <span>📦 <span id="readtitledisplay-size">加载中...</span></span>
+                        </div>
+                    </a>
+                </li>
+                <li class="script-item">
+                    <a href="copy-markdown-helper/index.html">
+                        <div class="script-name">Sooon.ai 多功能链接复制器 - 使用文档</div>
+                        <div class="script-meta">
+                            <span>📅 <span id="copymarkdownhelper-time">加载中...</span></span>
+                            <span>📦 <span id="copymarkdownhelper-size">加载中...</span></span>
                         </div>
                     </a>
                 </li>
@@ -328,19 +369,23 @@
         }
 
         // 加载脚本信息
-        async function loadScriptInfo() {
+                async function loadScriptInfo() {
+            const tempveclistInfo = await getFileInfo('temp-vec-list/user.js');
+            document.getElementById('tempveclist-time').textContent = tempveclistInfo.lastModified;
+            document.getElementById('tempveclist-size').textContent = tempveclistInfo.size;
 
-            const copyHelperInfo = await getFileInfo('copy-markdown-helper/user.js');
-            document.getElementById('copy-helper-time').textContent = copyHelperInfo.lastModified;
-            document.getElementById('copy-helper-size').textContent = copyHelperInfo.size;
+            const readthroughassistInfo = await getFileInfo('read-through-assist/user.js');
+            document.getElementById('readthroughassist-time').textContent = readthroughassistInfo.lastModified;
+            document.getElementById('readthroughassist-size').textContent = readthroughassistInfo.size;
 
-            const readAssistInfo = await getFileInfo('read-through-assist/user.js');
-            document.getElementById('read-assist-time').textContent = readAssistInfo.lastModified;
-            document.getElementById('read-assist-size').textContent = readAssistInfo.size;
+            const readtitledisplayInfo = await getFileInfo('read-title-display/user.js');
+            document.getElementById('readtitledisplay-time').textContent = readtitledisplayInfo.lastModified;
+            document.getElementById('readtitledisplay-size').textContent = readtitledisplayInfo.size;
 
-            const readTitleInfo = await getFileInfo('read-title-display/user.js');
-            document.getElementById('read-title-time').textContent = readTitleInfo.lastModified;
-            document.getElementById('read-title-size').textContent = readTitleInfo.size;
+            const copymarkdownhelperInfo = await getFileInfo('copy-markdown-helper/user.js');
+            document.getElementById('copymarkdownhelper-time').textContent = copymarkdownhelperInfo.lastModified;
+            document.getElementById('copymarkdownhelper-size').textContent = copymarkdownhelperInfo.size;
+
         }
 
         // 页面加载完成后获取文件信息

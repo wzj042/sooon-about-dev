@@ -1,0 +1,9 @@
+#!/usr/bin/env sh
+# 检查是否有脚本文件变化
+changed=$(git diff --cached --name-only | grep -E '^script/' | grep -E '(user\.js|index\.html)$')
+
+if [ -n "$changed" ]; then
+    echo "🔄 检测到脚本目录变化，正在更新脚本列表..."
+    pnpm generate-script-list
+    git add script/index.html
+fi
