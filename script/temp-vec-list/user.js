@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         素问聚焦顺序阅读
 // @namespace    http://tampermonkey.net/
-// @version      1.2
-// @description  解决闪烁、宽度不足、排序混乱问题
+// @version      1.0
+// @description  将瀑布流顺序阅读改为单列
 // @author       You
 // @match        https://sooon.ai/home/read/feed*
 // @match        https://sooon.ai/**
