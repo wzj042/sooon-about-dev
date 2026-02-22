@@ -1,68 +1,83 @@
 name: Deploy React App to GitHub Pages
 
 on:
-  # 推送到 main 分支时触发?
   push:
     branches: [ main ]
-    paths:
-      - 'app/sooon-battle-simulate/**'
-      - '.github/workflows/deploy.yml'
-
-  # 手动触发
   workflow_dispatch:
 
-# 设置 GITHUB_TOKEN 权限
 permissions:
   contents: read
   pages: write
   id-token: write
 
-# 确保只有一个部署作业同时运行?
 concurrency:
-  group: "pages"
+  group: pages
   cancel-in-progress: false
 
 jobs:
-  # 构建和部署作�?
   deploy:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
+
     steps:
-      - name: 检出代码
+      - name: Checkout
         uses: actions/checkout@v4
 
-
-      - name: 设置 Node.js
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
-          cache: 'npm'
-          cache-dependency-path: 'app/sooon-battle-simulate/react-app/package-lock.json'
+          node-version: '20.19.0'
+          cache: npm
+          cache-dependency-path: app/sooon-battle-simulate/react-app/package-lock.json
 
-      - name: 安装依赖
+      - name: Install dependencies
         working-directory: app/sooon-battle-simulate/react-app
         run: npm ci
 
-      - name: 构建
+      - name: Build React app
         working-directory: app/sooon-battle-simulate/react-app
         run: npm run build
 
-      - name: 确保 .nojekyll 文件存在
-        working-directory: app/sooon-battle-simulate/dist
+      - name: Prepare Pages artifact
         run: |
-          touch .nojekyll
-          echo "已创建.nojekyll 文件以禁用Jekyll 处理"
+          rm -rf _site
+          mkdir -p _site
 
-      - name: 设置 Pages
+          # Keep default static site at /
+          rsync -a ./ _site/ \
+            --exclude .git \
+            --exclude .github \
+            --exclude .claude \
+            --exclude .history \
+            --exclude node_modules \
+            --exclude _site \
+            --exclude app/sooon-battle-simulate/react-app \
+            --exclude app/sooon-battle-simulate/dist
+
+          # Publish React build at /app/sooon-battle-simulate/dist
+          mkdir -p _site/app/sooon-battle-simulate/dist
+          rsync -a app/sooon-battle-simulate/dist/ _site/app/sooon-battle-simulate/dist/
+
+          touch _site/.nojekyll
+
+      - name: Verify Pages artifact
+        run: |
+          test -f _site/index.html
+          test -f _site/app/sooon-battle-simulate/index.html
+          test -f _site/app/sooon-battle-simulate/dist/index.html
+          echo "Artifact layout:"
+          find _site -maxdepth 4 -type f | sort
+
+      - name: Setup Pages
         uses: actions/configure-pages@v4
 
-      - name: 上传构建产物
+      - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: 'app/sooon-battle-simulate/dist'
+          path: _site
 
-      - name: 部署到 GitHub Pages
+      - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
