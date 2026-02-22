@@ -9,13 +9,16 @@ interface PracticeQueuePayload {
 interface LastPracticeQueueSessionPayload {
   questions: QuestionItem[]
   cursor: number
+  practicedCount?: number
   updatedAt: string
 }
 
 const PRACTICE_QUEUE_KEY = 'sooon-practice-queue'
 const PRACTICE_QUEUE_FALLBACK_KEY = 'sooon-practice-queue-fallback'
 const LAST_PRACTICE_QUEUE_SESSION_KEY = 'sooon-last-practice-queue-session'
-const PRACTICE_QUEUE_MAX_ITEMS = 500
+// Do not enforce an arbitrary small hard cap (legacy cap was 500).
+// Storage limits should be determined by browser capacity instead.
+const PRACTICE_QUEUE_MAX_ITEMS = Number.MAX_SAFE_INTEGER
 const PRACTICE_QUEUE_FALLBACK_TTL_MS = 5000
 export const MIN_PRACTICE_QUEUE_ITEMS = 5
 
@@ -100,7 +103,12 @@ function normalizeCursor(cursor: number, length: number): number {
   return normalized >= 0 ? normalized : normalized + length
 }
 
-export function saveLastPracticeQueueSession(questions: QuestionItem[], cursor = 0): number {
+function normalizePracticedCount(practicedCount: number): number {
+  if (!Number.isFinite(practicedCount)) return 0
+  return Math.max(0, Math.floor(practicedCount))
+}
+
+export function saveLastPracticeQueueSession(questions: QuestionItem[], cursor = 0, practicedCount = 0): number {
   const normalized = questions.filter(isValidQuestionItem).slice(0, PRACTICE_QUEUE_MAX_ITEMS)
   if (normalized.length <= 0) {
     try {
@@ -114,6 +122,7 @@ export function saveLastPracticeQueueSession(questions: QuestionItem[], cursor =
   const payload: LastPracticeQueueSessionPayload = {
     questions: normalized,
     cursor: normalizeCursor(cursor, normalized.length),
+    practicedCount: normalizePracticedCount(practicedCount),
     updatedAt: new Date().toISOString(),
   }
 
@@ -121,7 +130,7 @@ export function saveLastPracticeQueueSession(questions: QuestionItem[], cursor =
   return normalized.length
 }
 
-export function loadLastPracticeQueueSession(): { questions: QuestionItem[]; cursor: number } | null {
+export function loadLastPracticeQueueSession(): { questions: QuestionItem[]; cursor: number; practicedCount: number } | null {
   const payload = getJson<Partial<LastPracticeQueueSessionPayload>>(LAST_PRACTICE_QUEUE_SESSION_KEY, {})
   if (!Array.isArray(payload.questions)) return null
 
@@ -129,11 +138,23 @@ export function loadLastPracticeQueueSession(): { questions: QuestionItem[]; cur
   if (questions.length <= 0) return null
 
   const cursor = normalizeCursor(Number(payload.cursor ?? 0), questions.length)
-  return { questions, cursor }
+  const practicedCount = normalizePracticedCount(Number(payload.practicedCount ?? cursor))
+  return { questions, cursor, practicedCount }
 }
 
 export function updateLastPracticeQueueCursor(cursor: number): void {
   const session = loadLastPracticeQueueSession()
   if (!session) return
-  saveLastPracticeQueueSession(session.questions, cursor)
+  saveLastPracticeQueueSession(session.questions, cursor, session.practicedCount)
+}
+
+export function advanceLastPracticeQueueProgress(delta: number): void {
+  const session = loadLastPracticeQueueSession()
+  if (!session) return
+  const safeDelta = Math.max(0, Math.floor(delta))
+  if (safeDelta <= 0) return
+
+  const nextPracticed = session.practicedCount + safeDelta
+  const nextCursor = session.cursor + safeDelta
+  saveLastPracticeQueueSession(session.questions, nextCursor, nextPracticed)
 }

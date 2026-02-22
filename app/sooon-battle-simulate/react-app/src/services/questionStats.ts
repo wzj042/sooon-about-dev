@@ -200,11 +200,11 @@ export function getQuestionStatsSummary(map: QuestionStatsMap): QuestionStatsSum
 
 export function isEthicsType(type?: string): boolean {
   if (typeof type !== 'string') return false
-  const normalized = type.trim().toLowerCase()
-  return normalized.includes('ethic') || normalized.includes('伦理')
+  return type.trim().toLowerCase() === 'sooon_ai'
 }
 
 export function isCommonSenseType(type?: string): boolean {
   if (typeof type !== 'string') return false
   return type.trim().toLowerCase() === 'common_sense'
 }
+
