@@ -9,7 +9,6 @@ import { averageResponseMs, getQuestionStat, isCommonSenseType, isEthicsType, lo
 import { TimerRegistry } from './timers'
 
 const DEFAULT_TOTAL_ROUNDS = 5
-const PRACTICE_QUEUE_ROUNDS = 5
 const TIMER_TICK_MS = 80
 const DEFAULT_MAX_SCORE = 900
 const DEFAULT_QUESTION_SELECTION_STRATEGY: QuestionSelectionStrategy = 'shuffled_traversal_recent_first'
@@ -93,48 +92,32 @@ function parseUpdatedTimestamp(updatedAt?: string): number | null {
 }
 
 function buildWeightedRecentTraversal(bank: QuestionItem[], requiredCount: number): QuestionItem[] {
-  const sortedByRecent = [...bank]
-    .map((item) => ({
-      item,
-      updatedTimestamp: parseUpdatedTimestamp(item.updatedAt),
-    }))
+  const stats = loadQuestionStatsMap()
+  const ranked = [...bank]
+    .map((item) => {
+      const entry = getQuestionStat(item.question, stats)
+      return {
+        item,
+        practicedCount: entry?.seenCount ?? 0,
+        updatedTimestamp: parseUpdatedTimestamp(item.updatedAt),
+        seed: Math.random(),
+      }
+    })
     .sort((left, right) => {
+      // Prefer never-seen and least-practiced questions first.
+      if (left.practicedCount !== right.practicedCount) return left.practicedCount - right.practicedCount
+
+      // Within the same practice level, start from newer questions.
       const leftTime = left.updatedTimestamp
       const rightTime = right.updatedTimestamp
-
       if (leftTime !== null && rightTime !== null && leftTime !== rightTime) return rightTime - leftTime
       if (leftTime !== null && rightTime === null) return -1
       if (leftTime === null && rightTime !== null) return 1
-      return Math.random() - 0.5
+      return left.seed - right.seed
     })
     .map((row) => row.item)
 
-  const targetCount = Math.min(requiredCount, sortedByRecent.length)
-  const weightedPool = sortedByRecent.map((item, index, source) => ({
-    item,
-    // Newer rows (front of sorted list) have higher probability.
-    weight: 1 + ((source.length - index) / source.length) * 3,
-  }))
-
-  const picked: QuestionItem[] = []
-  while (picked.length < targetCount && weightedPool.length > 0) {
-    const totalWeight = weightedPool.reduce((sum, row) => sum + row.weight, 0)
-    let cursor = Math.random() * totalWeight
-    let pickedIndex = weightedPool.length - 1
-
-    for (let index = 0; index < weightedPool.length; index += 1) {
-      cursor -= weightedPool[index].weight
-      if (cursor <= 0) {
-        pickedIndex = index
-        break
-      }
-    }
-
-    const [next] = weightedPool.splice(pickedIndex, 1)
-    picked.push(next.item)
-  }
-
-  return picked
+  return ranked.slice(0, Math.min(requiredCount, ranked.length))
 }
 
 function buildUnseenFirstSelection(bank: QuestionItem[], requiredCount: number): QuestionItem[] {
@@ -223,12 +206,27 @@ function dedupeQuestionBank(bank: QuestionItem[]): QuestionItem[] {
   return deduped
 }
 
+function normalizeQueueCursor(cursor: number, length: number): number {
+  if (!Number.isFinite(cursor) || length <= 0) return 0
+  const normalized = Math.floor(cursor) % length
+  return normalized >= 0 ? normalized : normalized + length
+}
+
+function rotateByCursor<T>(items: T[], cursor: number): T[] {
+  if (items.length <= 1) return [...items]
+  const offset = normalizeQueueCursor(cursor, items.length)
+  if (offset === 0) return [...items]
+  return [...items.slice(offset), ...items.slice(0, offset)]
+}
+
 export const useGameStore = create<GameStore>((set, get) => {
   const timers = new TimerRegistry()
 
   let questionBank: QuestionItem[] = []
   let selectedQuestions: QuestionItem[] = []
   let practiceQueueQuestions: QuestionItem[] = []
+  let practiceQueueCursor = 0
+  let practiceQueueProgress = 0
 
   let timerIntervalId: number | null = null
   let opponentTimeoutId: number | null = null
@@ -275,7 +273,8 @@ export const useGameStore = create<GameStore>((set, get) => {
       const stats = loadQuestionStatsMap()
       const isMastered = (question: string): boolean => getQuestionStat(question, stats)?.mastered === true
       const used = new Set<string>()
-      const preferred = practiceQueueQuestions.filter((item) => {
+      const queueWindow = rotateByCursor(practiceQueueQuestions, practiceQueueCursor)
+      const preferred = queueWindow.filter((item) => {
         if (used.has(item.question)) return false
         if (isMastered(item.question)) return false
         used.add(item.question)
@@ -283,29 +282,9 @@ export const useGameStore = create<GameStore>((set, get) => {
       })
 
       selectedQuestions = preferred.slice(0, requiredCount)
-
-      const shortBy = requiredCount - selectedQuestions.length
-      if (shortBy > 0) {
-        if (questionBank.length < requiredCount) {
-          try {
-            questionBank = await loadQuestionPool(requiredCount)
-            set({ questionLoadError: null })
-          } catch (error) {
-            questionBank = []
-            set({ questionLoadError: error instanceof Error ? error.message : 'Failed to load question bank' })
-          }
-        }
-
-        if (questionBank.length > 0) {
-          const fallbackPool = questionBank.filter((item) => !used.has(item.question) && !isMastered(item.question))
-          const supplements = buildWeightedRecentTraversal(fallbackPool, shortBy)
-          for (const item of supplements) {
-            if (used.has(item.question)) continue
-            used.add(item.question)
-            selectedQuestions.push(item)
-          }
-        }
-      }
+      set({
+        questionLoadError: selectedQuestions.length === 0 ? 'No practiceable items in queue. Please re-filter in Question Bank.' : null,
+      })
 
       if (selectedQuestions.length > 0 && selectedQuestions.length !== get().totalRounds) {
         set({ totalRounds: selectedQuestions.length })
@@ -330,6 +309,7 @@ export const useGameStore = create<GameStore>((set, get) => {
     }
 
     const strategy = get().questionSelectionStrategy
+    const isStrictTypeStrategy = strategy === 'common_sense_only' || strategy === 'ethics_only'
 
     if (strategy === 'repeatable_random') {
       selectedQuestions = []
@@ -356,11 +336,11 @@ export const useGameStore = create<GameStore>((set, get) => {
         selectedQuestions = buildWeightedRecentTraversal(candidateBank, requiredCount)
       }
 
-      if (selectedQuestions.length === 0) {
+      if (!isStrictTypeStrategy && selectedQuestions.length === 0) {
         selectedQuestions = buildWeightedRecentTraversal(candidateBank, requiredCount)
       }
 
-      if (selectedQuestions.length < requiredCount) {
+      if (!isStrictTypeStrategy && selectedQuestions.length < requiredCount) {
         const used = new Set(selectedQuestions.map((item) => item.question))
         const fallbackPool = dedupedBank.filter((item) => !used.has(item.question))
         const supplements = buildWeightedRecentTraversal(fallbackPool, requiredCount - selectedQuestions.length)
@@ -373,10 +353,14 @@ export const useGameStore = create<GameStore>((set, get) => {
       if (selectedQuestions.length > 0 && selectedQuestions.length < requiredCount) {
         set({ totalRounds: selectedQuestions.length })
       }
+
+      if (isStrictTypeStrategy && selectedQuestions.length === 0) {
+        set({ questionLoadError: 'No questions available for current strategy. Please switch strategy.' })
+      }
     }
   }
 
-  const getRoundQuestion = (round: number) => {
+  const getRoundQuestion = (round: number): { question: string; options: string[]; correctAnswer: number } | null => {
     const strategy = get().questionSelectionStrategy
 
     if (strategy === 'repeatable_random' && questionBank.length > 0 && practiceQueueQuestions.length === 0) {
@@ -385,13 +369,7 @@ export const useGameStore = create<GameStore>((set, get) => {
       return buildRoundQuestion(candidateBank[randomIndex])
     }
 
-    if (selectedQuestions.length === 0) {
-      return {
-        question: '题库加载失败，请稍后刷新重试',
-        options: ['A', 'B', 'C', 'D'],
-        correctAnswer: 0,
-      }
-    }
+    if (selectedQuestions.length === 0) return null
 
     const index = (round - 1) % selectedQuestions.length
     return buildRoundQuestion(selectedQuestions[index])
@@ -437,12 +415,14 @@ export const useGameStore = create<GameStore>((set, get) => {
       })
     }
 
+    const queuePracticedInSession = state.practiceQueueMode
+      ? Math.min(state.practiceQueueTotal, practiceQueueProgress + state.currentRound)
+      : 0
+
     set((current) => ({
       gamePhase: 'result',
       history: [...current.history, roundResult],
-      practiceQueuePracticed: current.practiceQueueMode
-        ? Math.min(current.practiceQueueTotal, Math.max(current.practiceQueuePracticed, current.currentRound))
-        : 0,
+      practiceQueuePracticed: queuePracticedInSession,
       animations: {
         ...current.animations,
         optionsExitAnimation: { timestamp: Date.now() },
@@ -498,6 +478,16 @@ export const useGameStore = create<GameStore>((set, get) => {
     const playerSelected = state.playerSelection !== null
     const opponentSelected = state.opponentSelection !== null
 
+    if (state.practiceQueueMode && playerSelected) {
+      stopTimer()
+      clearOpponentTimeout()
+      timers.clearTrackedTimeout(resultTimeoutId)
+      resultTimeoutId = timers.setTrackedTimeout(() => {
+        showResultsInternal()
+      }, state.playerCorrect === false ? 650 : 280)
+      return
+    }
+
     if (playerSelected && opponentSelected) {
       stopTimer()
       timers.clearTrackedTimeout(resultTimeoutId)
@@ -516,6 +506,7 @@ export const useGameStore = create<GameStore>((set, get) => {
   const simulateOpponentAnswerInternal = () => {
     const state = get()
     if (state.gamePhase !== 'question') return
+    if (state.practiceQueueMode) return
     if (state.opponentSelection !== null) return
 
     let choice = state.correctAnswer ?? 0
@@ -543,6 +534,7 @@ export const useGameStore = create<GameStore>((set, get) => {
 
   const waitForOpponentInternal = () => {
     const state = get()
+    if (state.practiceQueueMode) return
     if (state.gamePhase !== 'question' || state.opponentSelection !== null) return
     if (opponentTimeoutId !== null) return
 
@@ -559,6 +551,11 @@ export const useGameStore = create<GameStore>((set, get) => {
     const state = get()
     if (state.gamePhase !== 'waiting') return
 
+    if (state.practiceQueueMode) {
+      set({ gamePhase: 'question' })
+      return
+    }
+
     set({ gamePhase: 'question' })
     startTimerInternal()
     waitForOpponentInternal()
@@ -569,10 +566,31 @@ export const useGameStore = create<GameStore>((set, get) => {
     clearOpponentTimeout()
     timers.clearTrackedTimeout(resultTimeoutId)
 
+    const beforePrepare = get()
+    await ensureQuestionsPrepared(beforePrepare.totalRounds)
     const current = get()
-    await ensureQuestionsPrepared(current.totalRounds)
 
     const questionData = getRoundQuestion(round)
+    if (!questionData) {
+      set({
+        gamePhase: 'ready',
+        currentQuestion: null,
+        questionOptions: [],
+        correctAnswer: null,
+        playerSelection: null,
+        opponentSelection: null,
+        playerCorrect: null,
+        opponentCorrect: null,
+        bothSelected: false,
+        timerRunning: false,
+        buttonStates: {
+          options: [],
+          initialized: false,
+        },
+      })
+      return
+    }
+
     const isFinalRound = round === current.totalRounds
     const timeForRound = isFinalRound ? current.maxTime * 2 : current.maxTime
 
@@ -613,12 +631,24 @@ export const useGameStore = create<GameStore>((set, get) => {
 
     const state = get()
 
+    if (state.practiceQueueMode && practiceQueueQuestions.length > 0 && state.gamePhase === 'ended') {
+      const advancedBy = Math.max(0, Math.floor(state.practiceQueuePracticed))
+      if (advancedBy > 0) {
+        const delta = Math.max(0, advancedBy - practiceQueueProgress)
+        practiceQueueCursor = normalizeQueueCursor(practiceQueueCursor + delta, practiceQueueQuestions.length)
+        practiceQueueProgress = Math.min(state.practiceQueueTotal, practiceQueueProgress + delta)
+      }
+    }
+
+    const resetTotalRounds = state.practiceQueueMode && practiceQueueQuestions.length > 0 ? Math.max(1, practiceQueueQuestions.length) : DEFAULT_TOTAL_ROUNDS
+
     set({
       gamePhase: 'ready',
       currentRound: 1,
+      totalRounds: resetTotalRounds,
       playerScore: 0,
       opponentScore: 0,
-      practiceQueuePracticed: 0,
+      practiceQueuePracticed: state.practiceQueueMode ? practiceQueueProgress : 0,
       timeLeft: state.maxTime,
       currentMaxTime: state.maxTime,
       timerRunning: false,
@@ -667,7 +697,7 @@ export const useGameStore = create<GameStore>((set, get) => {
       const selectedText = state.questionOptions[optionIndex]
       const correctText = state.questionOptions[state.correctAnswer ?? 0]
       const isCorrect = selectedText === correctText
-      const score = calculateScore(isCorrect, state.timeLeft)
+      const score = state.practiceQueueMode ? 0 : calculateScore(isCorrect, state.timeLeft)
 
       set((current) => ({
         playerSelection: optionIndex,
@@ -675,7 +705,9 @@ export const useGameStore = create<GameStore>((set, get) => {
         playerScore: current.playerScore + score,
       }))
 
-      triggerScoreAnimation(score, true)
+      if (!state.practiceQueueMode) {
+        triggerScoreAnimation(score, true)
+      }
       checkBothSelected()
     },
 
@@ -749,8 +781,10 @@ export const useGameStore = create<GameStore>((set, get) => {
 
     setPracticeQueue: (questions) => {
       practiceQueueQuestions = questions
+      practiceQueueCursor = 0
+      practiceQueueProgress = 0
       selectedQuestions = []
-      const normalizedTotalRounds = Math.max(1, Math.min(PRACTICE_QUEUE_ROUNDS, questions.length))
+      const normalizedTotalRounds = Math.max(1, questions.length)
       set({
         totalRounds: normalizedTotalRounds,
         practiceQueueMode: questions.length > 0,
@@ -769,6 +803,7 @@ export const useGameStore = create<GameStore>((set, get) => {
       set({
         gamePhase: 'ready',
         currentRound: 1,
+        totalRounds: DEFAULT_TOTAL_ROUNDS,
         playerScore: 0,
         opponentScore: 0,
         currentQuestion: null,
@@ -794,6 +829,8 @@ export const useGameStore = create<GameStore>((set, get) => {
         questionLoadError: null,
       })
       practiceQueueQuestions = []
+      practiceQueueCursor = 0
+      practiceQueueProgress = 0
     },
 
     destroy: () => {
