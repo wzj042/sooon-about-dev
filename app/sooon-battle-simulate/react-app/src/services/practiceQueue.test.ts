@@ -1,0 +1,49 @@
+// @vitest-environment jsdom
+
+import { beforeEach, describe, expect, it } from 'vitest'
+
+import { advanceLastPracticeQueueProgress, consumePracticeQueue, loadLastPracticeQueueSession, savePracticeQueue } from './practiceQueue'
+
+function buildQuestion(index: number) {
+  return {
+    question: `q-${index}`,
+    options: [`A-${index}`, `B-${index}`, `C-${index}`, `D-${index}`],
+    answer: 0,
+  }
+}
+
+describe('practiceQueue capacity', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    sessionStorage.clear()
+  })
+
+  it('preserves large queue sizes instead of truncating to 500', () => {
+    const total = 3400
+    const questions = Array.from({ length: total }, (_, index) => buildQuestion(index))
+
+    const saved = savePracticeQueue(questions)
+    const consumed = consumePracticeQueue()
+
+    expect(saved).toBe(total)
+    expect(consumed).toHaveLength(total)
+  })
+
+  it('tracks practiced progress separately from cursor rotation', () => {
+    const questions = Array.from({ length: 10 }, (_, index) => buildQuestion(index))
+    savePracticeQueue(questions)
+    consumePracticeQueue()
+
+    advanceLastPracticeQueueProgress(4)
+    let session = loadLastPracticeQueueSession()
+    expect(session).not.toBeNull()
+    expect(session?.cursor).toBe(4)
+    expect(session?.practicedCount).toBe(4)
+
+    advanceLastPracticeQueueProgress(9)
+    session = loadLastPracticeQueueSession()
+    expect(session).not.toBeNull()
+    expect(session?.cursor).toBe(3)
+    expect(session?.practicedCount).toBe(13)
+  })
+})
