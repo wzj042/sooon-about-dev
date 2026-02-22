@@ -84,12 +84,14 @@ body {
   background: #f0f0f0;
   /* 纭繚椤甸潰鑷冲皯鍗犳弧鏁翠釜瑙嗗彛楂樺害 */
   min-height: 100vh;
+  min-height: 100svh;
+  min-height: 100dvh;
   /* 浣跨敤Flexbox瀹炵幇灞呬腑瀵归綈 */
   display: flex;
   justify-content: center;
   align-items: center;
   /* 鍏佽姘村钩婊氬姩锛岄€傞厤灏忓睆骞?*/
-  overflow-x: auto;
+  overflow-x: hidden;
 }
 
 /* ==================== 娓告垙瀹瑰櫒鏍峰紡 ==================== */
@@ -101,11 +103,11 @@ body {
   /* 闃村奖鏁堟灉锛屽鍔犲眰娆℃劅 */
   box-shadow: 0 calc(4px * var(--scale-factor)) calc(12px * var(--scale-factor)) rgba(0, 0, 0, 0.1);
   /* 浣跨敤CSS鍙橀噺瀹炵幇鍝嶅簲寮忓昂瀵?*/
-  width: calc(var(--base-width) * var(--scale-factor));
-  height: calc(var(--base-height) * var(--scale-factor));
+  width: min(calc(var(--base-width) * var(--scale-factor)), calc(100vw - 24px));
+  height: min(calc(var(--base-height) * var(--scale-factor)), calc(100dvh - 24px));
   /* 纭繚鍦ㄥ皬灞忓箷涓婁笉浼氳秴鍑鸿鍙?*/
-  max-width: 100vw;
-  max-height: 100vh;
+  max-width: calc(100vw - 24px);
+  max-height: calc(100dvh - 24px);
   /* 鐩稿瀹氫綅锛屼负瀛愬厓绱犳彁渚涘畾浣嶄笂涓嬫枃 */
   position: relative;
   /* 闅愯棌婧㈠嚭鍐呭 */
@@ -480,6 +482,7 @@ progress {
   
   margin-top: calc(100px * var(--scale-factor));
   padding: calc(var(--spacing-xxl) * var(--scale-factor)) 0;
+  min-height: calc(560px * var(--scale-factor));
   text-align: center;
   display: flex;
   align-items: center;
@@ -505,7 +508,7 @@ progress {
   flex-direction: column;
   justify-content: flex-end;
   overflow: hidden;
-  top: 65%;
+  top: 50%;
   transform: translateY(-50%);
 }
 

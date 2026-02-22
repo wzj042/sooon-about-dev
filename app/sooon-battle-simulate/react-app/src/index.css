@@ -16,6 +16,17 @@ body {
   margin: 0 !important;
   display: block !important;
   min-width: 320px;
+  top: 0 !important;
+}
+
+body.translated-ltr,
+body.translated-rtl {
+  top: 0 !important;
+}
+
+.goog-te-banner-frame.skiptranslate,
+body > .skiptranslate {
+  display: none !important;
 }
 
 * {
@@ -24,18 +35,23 @@ body {
 
 .game-page-shell {
   min-height: 100vh;
+  min-height: 100svh;
+  min-height: 100dvh;
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  padding: 20px;
-  overflow-x: auto;
+  padding: 20px 12px;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .game-page-content {
+  width: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
 }
 
 .avatar,
@@ -62,4 +78,12 @@ body {
   text-shadow: 0 2px 8px rgba(15, 23, 42, 0.2);
   pointer-events: none;
   z-index: 20;
+}
+
+@media (max-width: 640px) {
+  .game-page-shell {
+    justify-content: flex-start;
+    padding-top: max(12px, env(safe-area-inset-top));
+    padding-bottom: max(12px, env(safe-area-inset-bottom));
+  }
 }

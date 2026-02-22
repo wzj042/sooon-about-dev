@@ -117,16 +117,10 @@ export function QuestionSection({
   const showOpponentResult = shouldShowOpponentResult(gamePhase, playerSelection, opponentSelection)
   const [optionsVisible, setOptionsVisible] = useState(true)
   const [questionShownNotified, setQuestionShownNotified] = useState(false)
-  const [previousScores, setPreviousScores] = useState({
-    player: playerScore,
-    opponent: opponentScore,
-  })
 
   const safeMaxScore = maxScore > 0 ? maxScore : 1
   const leftProgress = Math.min(100, Number(((playerScore / safeMaxScore) * 100).toFixed(3)))
   const rightProgress = Math.min(100, Number(((opponentScore / safeMaxScore) * 100).toFixed(3)))
-  const leftProgressClassName = previousScores.player !== playerScore ? 'progress-fill' : 'progress-fill no-transition'
-  const rightProgressClassName = previousScores.opponent !== opponentScore ? 'progress-fill' : 'progress-fill no-transition'
   const normalizedTitleSpacingPx = normalizeTitleSpacingPx(titleSpacingPx)
   const renderedQuestionText = formatQuestionText(question ?? 'Loading question...', titleWrapChars)
 
@@ -154,17 +148,10 @@ export function QuestionSection({
     setOptionsVisible(false)
   }, [optionsExitAnimationTimestamp])
 
-  useEffect(() => {
-    setPreviousScores({
-      player: playerScore,
-      opponent: opponentScore,
-    })
-  }, [opponentScore, playerScore])
-
   return (
     <div className="question-section" style={{ display: gamePhase === 'ended' ? 'none' : '' }}>
       <div className="progress-bar left-progress">
-        <div className={leftProgressClassName} id="left-progress-fill" style={{ height: `${leftProgress}%` }} />
+        <div className="progress-fill" id="left-progress-fill" style={{ height: `${leftProgress}%` }} />
       </div>
 
       <div className="question-content">
@@ -252,7 +239,7 @@ export function QuestionSection({
       </div>
 
       <div className="progress-bar right-progress">
-        <div className={rightProgressClassName} id="right-progress-fill" style={{ height: `${rightProgress}%` }} />
+        <div className="progress-fill" id="right-progress-fill" style={{ height: `${rightProgress}%` }} />
       </div>
     </div>
   )
