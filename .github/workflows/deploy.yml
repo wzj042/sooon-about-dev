@@ -1,7 +1,7 @@
 name: Deploy React App to GitHub Pages
 
 on:
-  # 推送到 main 分支时触发
+  # 推送到 main 分支时触发?
   push:
     branches: [ main ]
     paths:
@@ -17,13 +17,13 @@ permissions:
   pages: write
   id-token: write
 
-# 确保只有一个部署作业同时运行
+# 确保只有一个部署作业同时运行?
 concurrency:
   group: "pages"
   cancel-in-progress: false
 
 jobs:
-  # 构建和部署作业
+  # 构建和部署作�?
   deploy:
     environment:
       name: github-pages
@@ -33,31 +33,27 @@ jobs:
       - name: 检出代码
         uses: actions/checkout@v4
 
-      - name: 设置 pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9
 
       - name: 设置 Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '18'
-          cache: 'pnpm'
-          cache-dependency-path: 'app/sooon-battle-simulate/react-app/pnpm-lock.yaml'
+          cache: 'npm'
+          cache-dependency-path: 'app/sooon-battle-simulate/react-app/package-lock.json'
 
       - name: 安装依赖
         working-directory: app/sooon-battle-simulate/react-app
-        run: pnpm install
+        run: npm ci
 
       - name: 构建
         working-directory: app/sooon-battle-simulate/react-app
-        run: pnpm build
+        run: npm run build
 
       - name: 确保 .nojekyll 文件存在
         working-directory: app/sooon-battle-simulate/dist
         run: |
           touch .nojekyll
-          echo "已创建 .nojekyll 文件以禁用 Jekyll 处理"
+          echo "已创建.nojekyll 文件以禁用Jekyll 处理"
 
       - name: 设置 Pages
         uses: actions/configure-pages@v4
