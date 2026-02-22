@@ -1,0 +1,65 @@
+﻿@import './styles/tailwind.css';
+@import './styles/legacy-parity.css';
+
+:root {
+  color-scheme: light;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  min-height: 100%;
+}
+
+body {
+  margin: 0 !important;
+  display: block !important;
+  min-width: 320px;
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.game-page-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 20px;
+  overflow-x: auto;
+}
+
+.game-page-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.avatar,
+.opponent-avatar {
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.avatar svg,
+.opponent-avatar svg {
+  width: 100%;
+  height: 100%;
+}
+
+.score-fly {
+  position: absolute;
+  left: 50%;
+  top: 32%;
+  transform: translateX(-50%);
+  font-size: 28px;
+  font-weight: 700;
+  color: #22c55e;
+  text-shadow: 0 2px 8px rgba(15, 23, 42, 0.2);
+  pointer-events: none;
+  z-index: 20;
+}
