@@ -52,6 +52,12 @@ interface QuestionBankCacheSnapshot {
   questions: QuestionItem[]
 }
 
+export interface QuestionBankCacheState {
+  manifestSignature: string | null
+  syncedPageCount: number
+  questionCount: number
+}
+
 interface QuestionBankMetaEntry {
   key: string
   value: unknown
@@ -331,6 +337,65 @@ async function readCacheSnapshotSafe(): Promise<QuestionBankCacheSnapshot> {
   }
 }
 
+async function readQuestionCacheStateFromDb(): Promise<QuestionBankCacheState> {
+  const db = await openQuestionBankDb()
+  const transaction = db.transaction([QUESTION_STORE_NAME, META_STORE_NAME], 'readonly')
+
+  const countRequest = transaction.objectStore(QUESTION_STORE_NAME).count()
+  const metaRequest = transaction.objectStore(META_STORE_NAME).getAll() as IDBRequest<unknown[]>
+
+  const [questionCount, metaRows] = await Promise.all([requestToPromise(countRequest), requestToPromise(metaRequest)])
+  await transactionToPromise(transaction)
+
+  const metaMap = metaEntriesToMap(Array.isArray(metaRows) ? metaRows : [])
+  const manifestSignature = getMetaString(metaMap, META_KEY_MANIFEST_SIGNATURE)
+  const syncedPages = getMetaStringArray(metaMap, META_KEY_SYNCED_PAGES)
+
+  return {
+    manifestSignature,
+    syncedPageCount: syncedPages.length,
+    questionCount: typeof questionCount === 'number' ? questionCount : 0,
+  }
+}
+
+async function readQuestionCacheStateSafe(): Promise<QuestionBankCacheState> {
+  if (!isIndexedDbAvailable()) {
+    return {
+      manifestSignature: null,
+      syncedPageCount: 0,
+      questionCount: 0,
+    }
+  }
+
+  try {
+    return await readQuestionCacheStateFromDb()
+  } catch {
+    return {
+      manifestSignature: null,
+      syncedPageCount: 0,
+      questionCount: 0,
+    }
+  }
+}
+
+async function loadCachedQuestionsPreview(limit: number): Promise<QuestionItem[]> {
+  if (!isIndexedDbAvailable()) return []
+
+  const safeLimit = Math.max(1, Math.floor(limit))
+
+  try {
+    const db = await openQuestionBankDb()
+    const transaction = db.transaction(QUESTION_STORE_NAME, 'readonly')
+    const store = transaction.objectStore(QUESTION_STORE_NAME)
+    const request = store.getAll(undefined, safeLimit) as IDBRequest<unknown[]>
+    const rows = await requestToPromise(request)
+    await transactionToPromise(transaction)
+    return parseArrayPayload(Array.isArray(rows) ? (rows as RawQuestionArrayPayload[]) : [])
+  } catch {
+    return []
+  }
+}
+
 async function writeCacheMeta(manifestSignature: string, syncedPages: string[]): Promise<void> {
   const db = await openQuestionBankDb()
   const transaction = db.transaction(META_STORE_NAME, 'readwrite')
@@ -574,6 +639,14 @@ export async function loadQuestionBank(signal?: AbortSignal): Promise<QuestionIt
 
 export async function loadCachedQuestionBank(): Promise<QuestionItem[]> {
   return tryLoadCachedQuestions()
+}
+
+export async function loadCachedQuestionBankPreview(limit: number): Promise<QuestionItem[]> {
+  return loadCachedQuestionsPreview(limit)
+}
+
+export async function loadQuestionBankCacheState(): Promise<QuestionBankCacheState> {
+  return readQuestionCacheStateSafe()
 }
 
 export async function loadQuestionPool(requiredCount: number, signal?: AbortSignal): Promise<QuestionItem[]> {

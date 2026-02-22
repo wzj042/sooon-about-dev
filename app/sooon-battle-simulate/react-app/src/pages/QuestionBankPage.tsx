@@ -3,7 +3,13 @@ import { Link, useNavigate } from 'react-router-dom'
 import { APP_ROUTES } from '../app/paths'
 
 import type { QuestionItem } from '../domain/types'
-import { loadCachedQuestionBank, loadQuestionPool } from '../services/questionBank'
+import {
+  loadCachedQuestionBank,
+  loadCachedQuestionBankPreview,
+  loadQuestionBankCacheState,
+  loadQuestionPool,
+  type QuestionBankCacheState,
+} from '../services/questionBank'
 import { MIN_PRACTICE_QUEUE_ITEMS, savePracticeQueue } from '../services/practiceQueue'
 import {
   averageResponseMs,
@@ -22,8 +28,8 @@ const VIRTUAL_ROW_HEIGHT = 188
 const VIRTUAL_OVERSCAN = 6
 const VIRTUAL_FALLBACK_VIEWPORT_HEIGHT = 640
 const MAX_VIRTUAL_RENDER_ROWS = 28
-const SLIDER_MIN_THUMB_HEIGHT = 40
 const MIN_TABLE_WIDTH_PX = 1200
+const INITIAL_CACHE_PREVIEW_ROWS = 240
 const OPTIONS_REVEAL_SESSION_KEY = 'question-bank-options-reveal-map'
 
 type TypeFilter = 'all' | 'with_type' | 'without_type'
@@ -147,24 +153,6 @@ function getUpdatedAtValue(item: QuestionItem): string | undefined {
   return undefined
 }
 
-function buildRowsFingerprint(rows: QuestionItem[]): string {
-  if (rows.length === 0) return '0'
-
-  const middleIndex = Math.floor(rows.length / 2)
-  const samples = [rows[0], rows[middleIndex], rows[rows.length - 1]]
-
-  const sampleText = samples
-    .map((item) => `${item.question}#${getUpdatedAtValue(item) ?? ''}#${normalizeTypeValue(item.type)}`)
-    .join('|')
-
-  let updatedCount = 0
-  for (const item of rows) {
-    if (getUpdatedAtValue(item)) updatedCount += 1
-  }
-
-  return `${rows.length}:${updatedCount}:${sampleText}`
-}
-
 function buildAnswerText(item: QuestionItem): string {
   const answerIndex = Number.isInteger(item.answer) ? item.answer : 0
   if (answerIndex < 0 || answerIndex >= ANSWER_LABELS.length) return '-'
@@ -256,8 +244,24 @@ function buildOptionRevealKey(row: TableRow): string {
   return `${row.originalIndex}:${row.item.question}`
 }
 
+function getColumnCssVarName(key: ColumnKey): string {
+  return `--qb-col-${key}-w`
+}
+
+function getColumnWidthFromMap(column: ColumnDefinition, widthMap: Record<ColumnKey, number>): number {
+  return widthMap[column.key] ?? column.defaultWidth
+}
+
+function areCacheStatesEqual(left: QuestionBankCacheState, right: QuestionBankCacheState): boolean {
+  return (
+    left.manifestSignature === right.manifestSignature &&
+    left.syncedPageCount === right.syncedPageCount &&
+    left.questionCount === right.questionCount
+  )
+}
+
 async function readCurrentLocalQuestionRows(): Promise<QuestionItem[]> {
-  const cached = await loadCachedQuestionBank()
+  const cached = await loadCachedQuestionBankPreview(INITIAL_CACHE_PREVIEW_ROWS)
   if (cached.length > 0) return cached
 
   const bootstrapped = await loadQuestionPool(1).catch(() => [])
@@ -288,18 +292,15 @@ export function QuestionBankPage() {
       return accumulator
     }, {} as Record<ColumnKey, number>)
   })
+  const [isResizingColumn, setIsResizingColumn] = useState(false)
 
   const scrollContainerRef = useRef<HTMLDivElement | null>(null)
-  const sliderTrackRef = useRef<HTMLDivElement | null>(null)
-  const isDraggingThumbRef = useRef(false)
-  const thumbDragOffsetRef = useRef(0)
-  const resizingColumnRef = useRef<{ key: ColumnKey; startX: number; startWidth: number } | null>(null)
+  const tableRef = useRef<HTMLTableElement | null>(null)
+  const resizingColumnRef = useRef<{ key: ColumnKey; startX: number; startWidth: number; pendingWidth: number } | null>(null)
+  const resizeAnimationFrameRef = useRef<number | null>(null)
 
   const [scrollTop, setScrollTop] = useState(0)
-  const [scrollLeft, setScrollLeft] = useState(0)
   const [viewportHeight, setViewportHeight] = useState(VIRTUAL_FALLBACK_VIEWPORT_HEIGHT)
-  const [viewportWidth, setViewportWidth] = useState(0)
-  const [scrollContentWidth, setScrollContentWidth] = useState(0)
   const deferredRows = useDeferredValue(rows)
 
   useEffect(() => {
@@ -318,7 +319,7 @@ export function QuestionBankPage() {
         setLoading(false)
         setSyncing(true)
 
-        let previousFingerprint = buildRowsFingerprint(initialRows)
+        let previousCacheState = await loadQuestionBankCacheState()
         let stableRounds = 0
         let pollRounds = 0
 
@@ -329,14 +330,14 @@ export function QuestionBankPage() {
 
           pollRounds += 1
           try {
-            const latest = await loadCachedQuestionBank()
-            if (cancelled) return
-
-            const latestFingerprint = buildRowsFingerprint(latest)
-            if (latestFingerprint !== previousFingerprint) {
-              previousFingerprint = latestFingerprint
+            const latestState = await loadQuestionBankCacheState()
+            if (!areCacheStatesEqual(previousCacheState, latestState)) {
+              previousCacheState = latestState
               stableRounds = 0
-              setRows(latest)
+              const previewRows = await loadCachedQuestionBankPreview(INITIAL_CACHE_PREVIEW_ROWS)
+              if (!cancelled && previewRows.length > 0) {
+                setRows(previewRows)
+              }
             } else {
               stableRounds += 1
             }
@@ -345,7 +346,13 @@ export function QuestionBankPage() {
           }
 
           if (stableRounds >= 3 || pollRounds >= MAX_CACHE_POLL_ROUNDS) {
-            if (!cancelled) setSyncing(false)
+            if (!cancelled) {
+              const fullRows = await loadCachedQuestionBank().catch(() => [])
+              if (fullRows.length > 0) {
+                setRows(fullRows)
+              }
+              setSyncing(false)
+            }
             return
           }
 
@@ -498,10 +505,8 @@ export function QuestionBankPage() {
     const node = scrollContainerRef.current
     if (node) {
       node.scrollTop = 0
-      node.scrollLeft = 0
     }
     setScrollTop(0)
-    setScrollLeft(0)
   }, [normalizedKeyword, selectedType, shuffleTick, sortMode, statsFilterMode, typeFilter])
 
   useEffect(() => {
@@ -511,29 +516,17 @@ export function QuestionBankPage() {
     const readViewportHeight = (): number => {
       return node.clientHeight > 0 ? node.clientHeight : VIRTUAL_FALLBACK_VIEWPORT_HEIGHT
     }
-    const readViewportWidth = (): number => {
-      return node.clientWidth > 0 ? node.clientWidth : 0
-    }
-    const readScrollContentWidth = (): number => {
-      return node.scrollWidth > 0 ? node.scrollWidth : 0
-    }
 
     const onScroll = () => {
       setScrollTop(node.scrollTop)
-      setScrollLeft(node.scrollLeft)
     }
 
     const onResize = () => {
       setViewportHeight(readViewportHeight())
-      setViewportWidth(readViewportWidth())
-      setScrollContentWidth(readScrollContentWidth())
     }
 
     setScrollTop(node.scrollTop)
-    setScrollLeft(node.scrollLeft)
     setViewportHeight(readViewportHeight())
-    setViewportWidth(readViewportWidth())
-    setScrollContentWidth(readScrollContentWidth())
 
     node.addEventListener('scroll', onScroll, { passive: true })
     window.addEventListener('resize', onResize)
@@ -549,10 +542,14 @@ export function QuestionBankPage() {
   }, [])
 
   useEffect(() => {
+    document.body.style.cursor = isResizingColumn ? 'col-resize' : ''
+    document.body.style.userSelect = isResizingColumn ? 'none' : ''
+
     return () => {
-      isDraggingThumbRef.current = false
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
     }
-  }, [])
+  }, [isResizingColumn])
 
   useEffect(() => {
     const handlePointerMove = (event: PointerEvent) => {
@@ -561,21 +558,51 @@ export function QuestionBankPage() {
 
       const definition = COLUMN_DEFINITION_MAP[activeResize.key]
       const nextWidth = Math.max(definition.minWidth, Math.round(activeResize.startWidth + (event.clientX - activeResize.startX)))
+      if (activeResize.pendingWidth === nextWidth) return
 
-      setColumnWidths((previous) => {
-        if (previous[activeResize.key] === nextWidth) return previous
-        return {
-          ...previous,
-          [activeResize.key]: nextWidth,
+      activeResize.pendingWidth = nextWidth
+
+      if (resizeAnimationFrameRef.current !== null) return
+      resizeAnimationFrameRef.current = window.requestAnimationFrame(() => {
+        resizeAnimationFrameRef.current = null
+        const currentResize = resizingColumnRef.current
+        if (!currentResize) return
+
+        const tableNode = tableRef.current
+        if (!tableNode) return
+
+        tableNode.style.setProperty(getColumnCssVarName(currentResize.key), `${currentResize.pendingWidth}px`)
+
+        let totalVisibleWidth = 0
+        for (const column of COLUMN_DEFINITIONS) {
+          if (!visibleColumns[column.key]) continue
+          if (column.key === currentResize.key) {
+            totalVisibleWidth += currentResize.pendingWidth
+            continue
+          }
+          totalVisibleWidth += getColumnWidthFromMap(column, columnWidths)
         }
+
+        tableNode.style.minWidth = `${Math.max(MIN_TABLE_WIDTH_PX, totalVisibleWidth)}px`
       })
     }
 
     const stopResizing = () => {
-      if (!resizingColumnRef.current) return
+      const activeResize = resizingColumnRef.current
+      if (!activeResize) return
+      setColumnWidths((previous) => {
+        if (previous[activeResize.key] === activeResize.pendingWidth) return previous
+        return {
+          ...previous,
+          [activeResize.key]: activeResize.pendingWidth,
+        }
+      })
       resizingColumnRef.current = null
-      document.body.style.cursor = ''
-      document.body.style.userSelect = ''
+      if (resizeAnimationFrameRef.current !== null) {
+        window.cancelAnimationFrame(resizeAnimationFrameRef.current)
+        resizeAnimationFrameRef.current = null
+      }
+      setIsResizingColumn(false)
     }
 
     window.addEventListener('pointermove', handlePointerMove)
@@ -586,10 +613,13 @@ export function QuestionBankPage() {
       window.removeEventListener('pointermove', handlePointerMove)
       window.removeEventListener('pointerup', stopResizing)
       window.removeEventListener('pointercancel', stopResizing)
-      document.body.style.cursor = ''
-      document.body.style.userSelect = ''
+      if (resizeAnimationFrameRef.current !== null) {
+        window.cancelAnimationFrame(resizeAnimationFrameRef.current)
+        resizeAnimationFrameRef.current = null
+      }
+      setIsResizingColumn(false)
     }
-  }, [])
+  }, [columnWidths, visibleColumns])
 
   const virtualWindow = useMemo(() => {
     if (loading || filteredRows.length === 0) {
@@ -615,76 +645,6 @@ export function QuestionBankPage() {
     }
   }, [filteredRows, loading, scrollTop, viewportHeight])
 
-  const totalContentHeight = filteredRows.length * VIRTUAL_ROW_HEIGHT
-  const maxScrollTop = Math.max(0, totalContentHeight - viewportHeight)
-  const canShowScrollSlider = !loading && !syncing && filteredRows.length > 0 && maxScrollTop > 0
-  const sliderTrackHeight = Math.max(0, viewportHeight)
-  const rawThumbHeight = canShowScrollSlider ? (viewportHeight / totalContentHeight) * sliderTrackHeight : 0
-  const sliderThumbHeight = canShowScrollSlider ? Math.max(SLIDER_MIN_THUMB_HEIGHT, Math.min(sliderTrackHeight, rawThumbHeight)) : 0
-  const sliderScrollableHeight = Math.max(0, sliderTrackHeight - sliderThumbHeight)
-  const sliderThumbTop = canShowScrollSlider && maxScrollTop > 0 ? (scrollTop / maxScrollTop) * sliderScrollableHeight : 0
-  const scrollProgressRatio = canShowScrollSlider && maxScrollTop > 0 ? Math.min(1, Math.max(0, scrollTop / maxScrollTop)) : 0
-  const scrollProgressHeight = sliderTrackHeight * scrollProgressRatio
-  const scrollProgressPercent = Math.round(scrollProgressRatio * 100)
-  const maxScrollLeft = Math.max(0, scrollContentWidth - viewportWidth)
-  const canShowHorizontalProgress = !loading && scrollContentWidth > viewportWidth + 1
-  const horizontalProgressRatio = canShowHorizontalProgress && maxScrollLeft > 0 ? Math.min(1, Math.max(0, scrollLeft / maxScrollLeft)) : 0
-  const horizontalProgressPercent = Math.round(horizontalProgressRatio * 100)
-
-  const syncScrollFromThumb = (thumbTop: number) => {
-    if (!canShowScrollSlider) return
-
-    const node = scrollContainerRef.current
-    if (!node) return
-
-    const clampedTop = Math.max(0, Math.min(sliderScrollableHeight, thumbTop))
-    const ratio = sliderScrollableHeight > 0 ? clampedTop / sliderScrollableHeight : 0
-    node.scrollTop = ratio * maxScrollTop
-    setScrollTop(node.scrollTop)
-  }
-
-  const handleSliderTrackPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (!canShowScrollSlider) return
-    if (event.target !== event.currentTarget) return
-
-    const rect = event.currentTarget.getBoundingClientRect()
-    const clickTop = event.clientY - rect.top
-    syncScrollFromThumb(clickTop - sliderThumbHeight / 2)
-  }
-
-  const handleSliderThumbPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (!canShowScrollSlider) return
-
-    const track = sliderTrackRef.current
-    if (!track) return
-
-    const rect = track.getBoundingClientRect()
-    thumbDragOffsetRef.current = event.clientY - rect.top - sliderThumbTop
-    isDraggingThumbRef.current = true
-    event.currentTarget.setPointerCapture(event.pointerId)
-    event.preventDefault()
-  }
-
-  const handleSliderThumbPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (!isDraggingThumbRef.current) return
-
-    const track = sliderTrackRef.current
-    if (!track) return
-
-    const rect = track.getBoundingClientRect()
-    const nextTop = event.clientY - rect.top - thumbDragOffsetRef.current
-    syncScrollFromThumb(nextTop)
-  }
-
-  const handleSliderThumbPointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (!isDraggingThumbRef.current) return
-
-    isDraggingThumbRef.current = false
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId)
-    }
-  }
-
   const handleStartQueuePractice = () => {
     const queue = filteredRows.map((row) => row.item)
     const effectiveQueueCount = filteredRows.filter((row) => row.statEntry?.mastered !== true).length
@@ -706,17 +666,21 @@ export function QuestionBankPage() {
   }, [visibleColumns])
 
   const tableMinWidthPx = useMemo(() => {
-    const width = visibleColumnDefs.reduce((sum, column) => sum + (columnWidths[column.key] ?? column.defaultWidth), 0)
+    const width = visibleColumnDefs.reduce((sum, column) => sum + getColumnWidthFromMap(column, columnWidths), 0)
     return Math.max(MIN_TABLE_WIDTH_PX, width)
   }, [columnWidths, visibleColumnDefs])
 
-  useEffect(() => {
-    const node = scrollContainerRef.current
-    if (!node) return
+  const tableStyle = useMemo(() => {
+    const style: React.CSSProperties & Record<string, string> = {
+      minWidth: `${tableMinWidthPx}px`,
+    }
 
-    setViewportWidth(node.clientWidth > 0 ? node.clientWidth : 0)
-    setScrollContentWidth(node.scrollWidth > 0 ? node.scrollWidth : 0)
-  }, [tableMinWidthPx, columnWidths, visibleColumnDefs.length, filteredRows.length])
+    for (const column of COLUMN_DEFINITIONS) {
+      style[getColumnCssVarName(column.key)] = `${getColumnWidthFromMap(column, columnWidths)}px`
+    }
+
+    return style
+  }, [columnWidths, tableMinWidthPx])
 
   const toggleColumnVisibility = (key: ColumnKey) => {
     setVisibleColumns((previous) => {
@@ -735,9 +699,9 @@ export function QuestionBankPage() {
       key,
       startX: event.clientX,
       startWidth: width,
+      pendingWidth: width,
     }
-    document.body.style.cursor = 'col-resize'
-    document.body.style.userSelect = 'none'
+    setIsResizingColumn(true)
     event.preventDefault()
     event.stopPropagation()
   }
@@ -810,9 +774,8 @@ export function QuestionBankPage() {
   }
 
   const renderTableCell = (columnKey: ColumnKey, row: TableRow, displayIndex: number) => {
-    const width = columnWidths[columnKey] ?? COLUMN_DEFINITION_MAP[columnKey].defaultWidth
     const minWidth = COLUMN_DEFINITION_MAP[columnKey].minWidth
-    const style = { width: `${width}px`, minWidth: `${minWidth}px` }
+    const style = { width: `var(${getColumnCssVarName(columnKey)})`, minWidth: `${minWidth}px` }
 
     switch (columnKey) {
       case 'index':
@@ -1062,16 +1025,15 @@ export function QuestionBankPage() {
 
         <section className="relative mt-3 flex min-h-[360px] flex-1 overflow-hidden rounded-2xl border border-[#2196f3]/20 bg-white/95 shadow-[0_14px_32px_rgba(33,150,243,0.14)] sm:mt-4 sm:min-h-0">
           <div className="h-full w-full overflow-auto pr-1" ref={scrollContainerRef}>
-            <table className="table-fixed text-left text-sm" style={{ minWidth: `${tableMinWidthPx}px` }}>
+            <table className="table-fixed text-left text-sm" ref={tableRef} style={tableStyle}>
               <thead className="sticky top-0 z-10 bg-[#e8f3ff] text-xs uppercase tracking-wide text-[#1b5fa6]">
                 <tr>
                   {visibleColumnDefs.map((column) => {
-                    const width = columnWidths[column.key] ?? column.defaultWidth
                     return (
                       <th
                         className="group relative border-r border-[#2196f3]/20 px-3 py-3 last:border-r-0"
                         key={column.key}
-                        style={{ width: `${width}px`, minWidth: `${column.minWidth}px` }}
+                        style={{ width: `var(${getColumnCssVarName(column.key)})`, minWidth: `${column.minWidth}px` }}
                       >
                         <span>{column.label}</span>
                         <div
@@ -1149,54 +1111,6 @@ export function QuestionBankPage() {
             <span>手气不错</span>
           </button>
 
-          {canShowScrollSlider ? (
-            <div className="pointer-events-none absolute right-1 top-1 z-20" style={{ height: `${sliderTrackHeight}px` }}>
-              <div
-                aria-label={`Table scroll progress ${scrollProgressPercent}%`}
-                aria-valuemax={100}
-                aria-valuemin={0}
-                aria-valuenow={scrollProgressPercent}
-                className="pointer-events-auto relative h-full w-2.5 overflow-hidden rounded-full bg-[#cfe5fb]/90"
-                onPointerDown={handleSliderTrackPointerDown}
-                ref={sliderTrackRef}
-                role="progressbar"
-                title={`Scroll progress ${scrollProgressPercent}%`}
-              >
-                <div
-                  className="pointer-events-none absolute left-0 top-0 w-full rounded-full bg-[#6cbcff]/90"
-                  style={{ height: `${scrollProgressHeight}px` }}
-                />
-                <div
-                  className="absolute left-0 w-full cursor-grab rounded-full bg-[#2196f3] active:cursor-grabbing"
-                  onPointerCancel={handleSliderThumbPointerUp}
-                  onPointerDown={handleSliderThumbPointerDown}
-                  onPointerMove={handleSliderThumbPointerMove}
-                  onPointerUp={handleSliderThumbPointerUp}
-                  role="presentation"
-                  style={{
-                    height: `${sliderThumbHeight}px`,
-                    transform: `translateY(${sliderThumbTop}px)`,
-                  }}
-                />
-              </div>
-            </div>
-          ) : null}
-
-          {canShowHorizontalProgress ? (
-            <div className="pointer-events-none absolute bottom-1 left-2 right-2 z-20 sm:bottom-2">
-              <div
-                aria-label={`Table horizontal scroll progress ${horizontalProgressPercent}%`}
-                aria-valuemax={100}
-                aria-valuemin={0}
-                aria-valuenow={horizontalProgressPercent}
-                className="relative h-1.5 overflow-hidden rounded-full bg-[#cfe5fb]/90"
-                role="progressbar"
-                title={`Horizontal scroll progress ${horizontalProgressPercent}%`}
-              >
-                <div className="absolute left-0 top-0 h-full rounded-full bg-[#2196f3]/90" style={{ width: `${horizontalProgressRatio * 100}%` }} />
-              </div>
-            </div>
-          ) : null}
         </section>
       </div>
     </main>
