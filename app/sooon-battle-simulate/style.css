@@ -89,7 +89,6 @@ body {
   justify-content: center;
   align-items: center;
   /* 添加内边距，防止内容贴边 */
-  padding: 20px;
   /* 允许水平滚动，适配小屏幕 */
   overflow-x: auto;
 }
