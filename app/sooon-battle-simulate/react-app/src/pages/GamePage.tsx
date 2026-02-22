@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { APP_ROUTES } from '../app/paths'
 import { useShallow } from 'zustand/react/shallow'
@@ -28,14 +28,6 @@ import {
   saveLegacyDisplayConfig,
   saveLegacyQuestionSelectionStrategy,
 } from '../services/legacyStorageCompat'
-import {
-  consumePracticeQueue,
-  loadLastPracticeQueueSession,
-  MIN_PRACTICE_QUEUE_ITEMS,
-  saveLastPracticeQueueSession,
-  updateLastPracticeQueueCursor,
-} from '../services/practiceQueue'
-import { getQuestionStat, loadQuestionStatsMap } from '../services/questionStats'
 import { exportUserData, importUserData } from '../services/userDataTransfer'
 import { detachDebugSettle, attachDebugSettle } from '../store/actions/debug'
 import { useGameStore } from '../store/gameStore'
@@ -60,13 +52,6 @@ function normalizeAvatarForSave(avatar: AvatarData, fallbackAvatarSrc: string): 
     svg: avatar.svg || fallbackAvatarSrc,
     timestamp: Date.now(),
   }
-}
-
-function rotateQueueByCursor<T>(list: T[], cursor: number): T[] {
-  if (list.length <= 1) return [...list]
-  const offset = ((Math.floor(cursor) % list.length) + list.length) % list.length
-  if (offset === 0) return [...list]
-  return [...list.slice(offset), ...list.slice(0, offset)]
 }
 
 export function GamePage() {
@@ -95,7 +80,6 @@ export function GamePage() {
   )
 
   const startNewGame = useGameStore((state) => state.startNewGame)
-  const currentRound = useGameStore((state) => state.currentRound)
   const activateQuestion = useGameStore((state) => state.activateQuestion)
   const selectAnswer = useGameStore((state) => state.selectAnswer)
   const configureOpponent = useGameStore((state) => state.configureOpponent)
@@ -153,22 +137,6 @@ export function GamePage() {
       if (cancelled) return
 
       const store = useGameStore.getState()
-      const shouldResumeQueue = new URLSearchParams(window.location.search).get('resumeQueue') === '1'
-
-      let practiceQueue = consumePracticeQueue()
-      if (shouldResumeQueue) {
-        const lastSession = loadLastPracticeQueueSession()
-        if (lastSession) {
-          practiceQueue = rotateQueueByCursor(lastSession.questions, lastSession.cursor)
-          saveLastPracticeQueueSession(practiceQueue, 0)
-        }
-      } else if (practiceQueue.length > 0) {
-        saveLastPracticeQueueSession(practiceQueue, 0)
-      }
-
-      const stats = loadQuestionStatsMap()
-      const nonMasteredQueueCount = practiceQueue.filter((item) => getQuestionStat(item.question, stats)?.mastered !== true).length
-
       setSettings({
         accuracyPercent: normalized.accuracyPercent,
         minSpeedMs: normalized.minSpeedMs,
@@ -199,14 +167,6 @@ export function GamePage() {
         store.configureOpponent({ avatar: legacy.opponentAvatarData.svg })
       }
 
-      if (practiceQueue.length > 0 && nonMasteredQueueCount < MIN_PRACTICE_QUEUE_ITEMS) {
-        window.alert(`当前队列未掌握题仅 ${nonMasteredQueueCount} 题，最少需要 ${MIN_PRACTICE_QUEUE_ITEMS} 题才能开始练习`)
-      }
-
-      if (nonMasteredQueueCount >= MIN_PRACTICE_QUEUE_ITEMS) {
-        store.setPracticeQueue(practiceQueue)
-      }
-
       await startNewGame()
     }
 
@@ -225,17 +185,6 @@ export function GamePage() {
       useGameStore.getState().destroy()
     }
   }, [startNewGame])
-
-  useEffect(() => {
-    if (!gameState.practiceQueueMode) return
-    if (gameState.gamePhase !== 'waiting' && gameState.gamePhase !== 'question' && gameState.gamePhase !== 'result') return
-
-    const session = loadLastPracticeQueueSession()
-    if (!session || session.questions.length <= 0) return
-
-    const cursor = Math.max(0, currentRound - 1) % session.questions.length
-    updateLastPracticeQueueCursor(cursor)
-  }, [currentRound, gameState.gamePhase, gameState.practiceQueueMode])
 
   const applySettings = (params: {
     accuracyPercent: number
@@ -371,7 +320,6 @@ export function GamePage() {
       {gameState.questionLoadError ? (
         <div className="mb-3 rounded-md bg-amber-100 px-3 py-2 text-sm text-amber-800">{gameState.questionLoadError}</div>
       ) : null}
-
       <GameBoard
         opponentId={settings.opponentId}
         optionWrapChars={normalizedSettings.optionWrapChars}

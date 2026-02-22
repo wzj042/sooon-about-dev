@@ -260,6 +260,108 @@ function areCacheStatesEqual(left: QuestionBankCacheState, right: QuestionBankCa
   )
 }
 
+interface BuildFilteredRowsParams {
+  sourceRows: QuestionItem[]
+  normalizedKeyword: string
+  selectedType: string
+  shuffleTick: number
+  sortMode: SortMode
+  statsFilterMode: StatsFilterMode
+  statsMap: QuestionStatsMap
+  typeFilter: TypeFilter
+}
+
+function buildFilteredRows(params: BuildFilteredRowsParams): TableRow[] {
+  const { normalizedKeyword, selectedType, shuffleTick, sortMode, sourceRows, statsFilterMode, statsMap, typeFilter } = params
+
+  const prepared: TableRow[] = sourceRows.map((item, originalIndex) => ({
+    item,
+    originalIndex,
+    normalizedType: normalizeTypeValue(item.type),
+    updatedAt: getUpdatedAtValue(item),
+    updatedTimestamp: parseUpdatedTimestamp(getUpdatedAtValue(item)),
+    statEntry: statsMap[item.question] ?? null,
+    lastAnsweredTimestamp: parseAnsweredTimestamp(statsMap[item.question]?.lastAnsweredAt ?? ''),
+    accuracyRate: getAccuracyRate(statsMap[item.question] ?? null),
+  }))
+
+  const filtered = prepared.filter((row) => {
+    if (typeFilter === 'with_type' && row.normalizedType.length === 0) return false
+    if (typeFilter === 'without_type' && row.normalizedType.length > 0) return false
+    if (selectedType !== 'all' && row.normalizedType !== selectedType) return false
+    if (statsFilterMode === 'wrong_only' && (!row.statEntry || row.statEntry.wrongCount <= 0)) return false
+    if (statsFilterMode === 'unseen_only' && row.statEntry && row.statEntry.seenCount > 0) return false
+    if (statsFilterMode === 'mastered_only' && (!row.statEntry || row.statEntry.mastered !== true)) return false
+
+    if (normalizedKeyword.length === 0) return true
+
+    const candidates = [row.item.question, ...row.item.options, row.normalizedType, row.updatedAt ?? '']
+    return candidates.some((candidate) => candidate.toLowerCase().includes(normalizedKeyword))
+  })
+
+  filtered.sort((left, right) => {
+    if (sortMode === 'wrong_desc' || sortMode === 'wrong_asc') {
+      const leftWrong = left.statEntry?.wrongCount ?? 0
+      const rightWrong = right.statEntry?.wrongCount ?? 0
+      if (leftWrong !== rightWrong) {
+        return sortMode === 'wrong_asc' ? leftWrong - rightWrong : rightWrong - leftWrong
+      }
+    }
+
+    if (sortMode === 'answered_at_desc' || sortMode === 'answered_at_asc') {
+      const leftTime = left.lastAnsweredTimestamp
+      const rightTime = right.lastAnsweredTimestamp
+      if (leftTime !== null && rightTime !== null && leftTime !== rightTime) {
+        return sortMode === 'answered_at_asc' ? leftTime - rightTime : rightTime - leftTime
+      }
+      if (leftTime === null && rightTime !== null) return 1
+      if (leftTime !== null && rightTime === null) return -1
+    }
+
+    if (sortMode === 'response_ms_desc' || sortMode === 'response_ms_asc') {
+      const leftMs = left.statEntry?.lastResponseMs ?? 0
+      const rightMs = right.statEntry?.lastResponseMs ?? 0
+      if (leftMs !== rightMs) {
+        return sortMode === 'response_ms_asc' ? leftMs - rightMs : rightMs - leftMs
+      }
+    }
+
+    if (sortMode === 'accuracy_desc' || sortMode === 'accuracy_asc') {
+      const leftAccuracy = left.accuracyRate
+      const rightAccuracy = right.accuracyRate
+      if (leftAccuracy !== null && rightAccuracy !== null && leftAccuracy !== rightAccuracy) {
+        return sortMode === 'accuracy_asc' ? leftAccuracy - rightAccuracy : rightAccuracy - leftAccuracy
+      }
+      if (leftAccuracy === null && rightAccuracy !== null) return 1
+      if (leftAccuracy !== null && rightAccuracy === null) return -1
+    }
+
+    const leftTime = left.updatedTimestamp
+    const rightTime = right.updatedTimestamp
+
+    if (leftTime !== null && rightTime !== null && leftTime !== rightTime) {
+      return sortMode === 'updated_asc' ? leftTime - rightTime : rightTime - leftTime
+    }
+
+    if (leftTime === null && rightTime !== null) return 1
+    if (leftTime !== null && rightTime === null) return -1
+
+    return left.originalIndex - right.originalIndex
+  })
+
+  if (shuffleTick > 0 && filtered.length > 1) {
+    const seed = Math.imul(shuffleTick, 2654435761)
+    return [...filtered].sort((left, right) => {
+      const leftKey = buildDeterministicShuffleKey(left, seed)
+      const rightKey = buildDeterministicShuffleKey(right, seed)
+      if (leftKey !== rightKey) return leftKey - rightKey
+      return left.originalIndex - right.originalIndex
+    })
+  }
+
+  return filtered
+}
+
 async function readCurrentLocalQuestionRows(): Promise<QuestionItem[]> {
   const cached = await loadCachedQuestionBankPreview(INITIAL_CACHE_PREVIEW_ROWS)
   if (cached.length > 0) return cached
@@ -293,6 +395,7 @@ export function QuestionBankPage() {
     }, {} as Record<ColumnKey, number>)
   })
   const [isResizingColumn, setIsResizingColumn] = useState(false)
+  const [startingQueuePractice, setStartingQueuePractice] = useState(false)
 
   const scrollContainerRef = useRef<HTMLDivElement | null>(null)
   const tableRef = useRef<HTMLTableElement | null>(null)
@@ -413,92 +516,16 @@ export function QuestionBankPage() {
   }, [availableTypes, selectedType])
 
   const filteredRows = useMemo(() => {
-    const prepared: TableRow[] = deferredRows.map((item, originalIndex) => ({
-      item,
-      originalIndex,
-      normalizedType: normalizeTypeValue(item.type),
-      updatedAt: getUpdatedAtValue(item),
-      updatedTimestamp: parseUpdatedTimestamp(getUpdatedAtValue(item)),
-      statEntry: statsMap[item.question] ?? null,
-      lastAnsweredTimestamp: parseAnsweredTimestamp(statsMap[item.question]?.lastAnsweredAt ?? ''),
-      accuracyRate: getAccuracyRate(statsMap[item.question] ?? null),
-    }))
-
-    const filtered = prepared.filter((row) => {
-      if (typeFilter === 'with_type' && row.normalizedType.length === 0) return false
-      if (typeFilter === 'without_type' && row.normalizedType.length > 0) return false
-      if (selectedType !== 'all' && row.normalizedType !== selectedType) return false
-      if (statsFilterMode === 'wrong_only' && (!row.statEntry || row.statEntry.wrongCount <= 0)) return false
-      if (statsFilterMode === 'unseen_only' && row.statEntry && row.statEntry.seenCount > 0) return false
-      if (statsFilterMode === 'mastered_only' && (!row.statEntry || row.statEntry.mastered !== true)) return false
-
-      if (normalizedKeyword.length === 0) return true
-
-      const candidates = [row.item.question, ...row.item.options, row.normalizedType, row.updatedAt ?? '']
-      return candidates.some((candidate) => candidate.toLowerCase().includes(normalizedKeyword))
+    return buildFilteredRows({
+      sourceRows: deferredRows,
+      normalizedKeyword,
+      selectedType,
+      shuffleTick,
+      sortMode,
+      statsFilterMode,
+      statsMap,
+      typeFilter,
     })
-
-    filtered.sort((left, right) => {
-      if (sortMode === 'wrong_desc' || sortMode === 'wrong_asc') {
-        const leftWrong = left.statEntry?.wrongCount ?? 0
-        const rightWrong = right.statEntry?.wrongCount ?? 0
-        if (leftWrong !== rightWrong) {
-          return sortMode === 'wrong_asc' ? leftWrong - rightWrong : rightWrong - leftWrong
-        }
-      }
-
-      if (sortMode === 'answered_at_desc' || sortMode === 'answered_at_asc') {
-        const leftTime = left.lastAnsweredTimestamp
-        const rightTime = right.lastAnsweredTimestamp
-        if (leftTime !== null && rightTime !== null && leftTime !== rightTime) {
-          return sortMode === 'answered_at_asc' ? leftTime - rightTime : rightTime - leftTime
-        }
-        if (leftTime === null && rightTime !== null) return 1
-        if (leftTime !== null && rightTime === null) return -1
-      }
-
-      if (sortMode === 'response_ms_desc' || sortMode === 'response_ms_asc') {
-        const leftMs = left.statEntry?.lastResponseMs ?? 0
-        const rightMs = right.statEntry?.lastResponseMs ?? 0
-        if (leftMs !== rightMs) {
-          return sortMode === 'response_ms_asc' ? leftMs - rightMs : rightMs - leftMs
-        }
-      }
-
-      if (sortMode === 'accuracy_desc' || sortMode === 'accuracy_asc') {
-        const leftAccuracy = left.accuracyRate
-        const rightAccuracy = right.accuracyRate
-        if (leftAccuracy !== null && rightAccuracy !== null && leftAccuracy !== rightAccuracy) {
-          return sortMode === 'accuracy_asc' ? leftAccuracy - rightAccuracy : rightAccuracy - leftAccuracy
-        }
-        if (leftAccuracy === null && rightAccuracy !== null) return 1
-        if (leftAccuracy !== null && rightAccuracy === null) return -1
-      }
-
-      const leftTime = left.updatedTimestamp
-      const rightTime = right.updatedTimestamp
-
-      if (leftTime !== null && rightTime !== null && leftTime !== rightTime) {
-        return sortMode === 'updated_asc' ? leftTime - rightTime : rightTime - leftTime
-      }
-
-      if (leftTime === null && rightTime !== null) return 1
-      if (leftTime !== null && rightTime === null) return -1
-
-      return left.originalIndex - right.originalIndex
-    })
-
-    if (shuffleTick > 0 && filtered.length > 1) {
-      const seed = Math.imul(shuffleTick, 2654435761)
-      return [...filtered].sort((left, right) => {
-        const leftKey = buildDeterministicShuffleKey(left, seed)
-        const rightKey = buildDeterministicShuffleKey(right, seed)
-        if (leftKey !== rightKey) return leftKey - rightKey
-        return left.originalIndex - right.originalIndex
-      })
-    }
-
-    return filtered
   }, [deferredRows, normalizedKeyword, selectedType, shuffleTick, sortMode, statsFilterMode, statsMap, typeFilter])
 
   useEffect(() => {
@@ -645,20 +672,29 @@ export function QuestionBankPage() {
     }
   }, [filteredRows, loading, scrollTop, viewportHeight])
 
-  const handleStartQueuePractice = () => {
-    const queue = filteredRows.map((row) => row.item)
-    const effectiveQueueCount = filteredRows.filter((row) => row.statEntry?.mastered !== true).length
-    if (effectiveQueueCount < MIN_PRACTICE_QUEUE_ITEMS) {
-      window.alert(`当前显示队列未掌握题仅 ${effectiveQueueCount} 题，最少需要 ${MIN_PRACTICE_QUEUE_ITEMS} 题才能开始练习`)
-      return
-    }
+  const handleStartQueuePractice = async () => {
+    if (startingQueuePractice) return
+    setStartingQueuePractice(true)
 
-    const count = savePracticeQueue(queue)
-    if (count < MIN_PRACTICE_QUEUE_ITEMS) {
-      window.alert(`当前可练习题目仅 ${count} 题，最少需要 ${MIN_PRACTICE_QUEUE_ITEMS} 题才能开始练习`)
-      return
+    try {
+      const queueRows = filteredRows
+
+      const queue = queueRows.map((row) => row.item)
+      const effectiveQueueCount = queueRows.filter((row) => row.statEntry?.mastered !== true).length
+      if (effectiveQueueCount < MIN_PRACTICE_QUEUE_ITEMS) {
+        window.alert(`当前显示队列未掌握题仅 ${effectiveQueueCount} 题，最少需要 ${MIN_PRACTICE_QUEUE_ITEMS} 题才能开始练习`)
+        return
+      }
+
+      const count = savePracticeQueue(queue)
+      if (count < MIN_PRACTICE_QUEUE_ITEMS) {
+        window.alert(`当前可练习题目仅 ${count} 题，最少需要 ${MIN_PRACTICE_QUEUE_ITEMS} 题才能开始练习`)
+        return
+      }
+      navigate(APP_ROUTES.queuePractice)
+    } finally {
+      setStartingQueuePractice(false)
     }
-    navigate(APP_ROUTES.game)
   }
 
   const visibleColumnDefs = useMemo(() => {
@@ -987,10 +1023,13 @@ export function QuestionBankPage() {
             {syncing ? <span className="font-medium text-[#2196f3]">本地缓存后台同步中...</span> : null}
             <button
               className="inline-flex items-center rounded-md border border-[#2196f3]/35 bg-white px-3 py-1.5 text-sm font-semibold text-[#1b5fa6] transition hover:border-[#2196f3] hover:bg-[#2196f3]/5"
+              disabled={startingQueuePractice}
               type="button"
-              onClick={handleStartQueuePractice}
+              onClick={() => {
+                void handleStartQueuePractice()
+              }}
             >
-              按当前显示队列顺序答题
+              {startingQueuePractice ? '正在准备队列...' : '按当前显示队列顺序答题'}
             </button>
           </div>
 

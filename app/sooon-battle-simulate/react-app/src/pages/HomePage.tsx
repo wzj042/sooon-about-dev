@@ -98,7 +98,7 @@ function formatSeconds(ms: number): string {
 export function HomePage() {
   const [summary, setSummary] = useState<QuestionStatsSummary>(DEFAULT_SUMMARY)
   const [totalQuestions, setTotalQuestions] = useState<number | null>(null)
-  const [lastQueueInfo, setLastQueueInfo] = useState<{ count: number; cursor: number } | null>(null)
+  const [lastQueueInfo, setLastQueueInfo] = useState<{ count: number; cursor: number; practicedCount: number } | null>(null)
   const [dailyStats, setDailyStats] = useState<DailyQuestionStatsMap>({})
 
   useEffect(() => {
@@ -123,6 +123,7 @@ export function HomePage() {
       setLastQueueInfo({
         count: session.questions.length,
         cursor: session.cursor,
+        practicedCount: session.practicedCount,
       })
     } else {
       setLastQueueInfo(null)
@@ -137,6 +138,9 @@ export function HomePage() {
   }, [summary.answeredUniqueQuestions, totalQuestions])
 
   const accuracy = summary.totalAttempts > 0 ? summary.totalCorrectCount / summary.totalAttempts : 0
+  const queueTotal = lastQueueInfo?.count ?? 0
+  const queuePracticed = Math.min(queueTotal, Math.max(0, lastQueueInfo?.practicedCount ?? 0))
+  const queueNextIndex = lastQueueInfo && lastQueueInfo.count > 0 ? (lastQueueInfo.cursor % lastQueueInfo.count) + 1 : 0
 
   const heatmap = useMemo(() => {
     const endDate = withZeroTime(new Date())
@@ -203,9 +207,9 @@ export function HomePage() {
             {lastQueueInfo ? (
               <Link
                 className="inline-flex items-center rounded-md border border-emerald-400/70 bg-emerald-400/10 px-6 py-3 text-base font-semibold text-emerald-200 transition hover:border-emerald-300 hover:text-emerald-100"
-                to={`${APP_ROUTES.game}?resumeQueue=1`}
+                to={`${APP_ROUTES.queuePractice}?resumeQueue=1`}
               >
-                继续上次队列练习（第 {(lastQueueInfo.cursor % lastQueueInfo.count) + 1} 题）
+                继续上次队列练习（{queuePracticed}/{queueTotal}，第 {queueNextIndex} 题）
               </Link>
             ) : null}
             <Link

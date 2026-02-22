@@ -41,7 +41,7 @@ export function EndScreen({
   onToggleAutoSkipEndScreen,
   onContinue,
 }: EndScreenProps) {
-  const frames = useMemo(() => buildEmojiFrames(playerScore, opponentScore), [playerScore, opponentScore])
+  const frames = useMemo(() => (practiceQueueMode ? ['(•̀ᴗ•́)و'] : buildEmojiFrames(playerScore, opponentScore)), [playerScore, opponentScore, practiceQueueMode])
   const [frameIndex, setFrameIndex] = useState(0)
 
   useEffect(() => {
@@ -72,11 +72,12 @@ export function EndScreen({
   const safeQueueTotal = Math.max(0, Math.floor(practiceQueueTotal))
   const safeQueuePracticed = Math.min(safeQueueTotal, Math.max(0, Math.floor(practiceQueuePracticed)))
   const safeQueueRemaining = Math.max(0, safeQueueTotal - safeQueuePracticed)
+  const title = practiceQueueMode ? '本轮刷题完成' : buildTitle(playerScore, opponentScore)
 
   return (
     <div className="end-screen" id="end-screen" style={{ display: visible ? 'flex' : 'none' }}>
       <div className="end-title" id="end-title">
-        {buildTitle(playerScore, opponentScore)}
+        {title}
       </div>
       <div className="end-emoji" id="end-emoji">
         {frames[frameIndex]}

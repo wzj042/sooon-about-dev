@@ -61,39 +61,44 @@ export function GameBoard({
   onContinue,
 }: GameBoardProps) {
   const isGameEnded = state.gamePhase === 'ended'
+  const isPracticeMode = state.practiceQueueMode
 
   return (
     <div className="quiz-container">
-      <ScoreFlyAnimation scoreAnimation={state.animations.scoreAnimation} />
+      {!isPracticeMode ? <ScoreFlyAnimation scoreAnimation={state.animations.scoreAnimation} /> : null}
 
-      <ScoreHeader
-        currentMaxTime={state.currentMaxTime}
-        opponent={state.opponent}
-        opponentId={opponentId}
-        opponentScore={state.opponentScore}
-        playerAvatarHtml={playerAvatarHtml}
-        playerId={playerId}
-        playerScore={state.playerScore}
-        timeLeft={state.timeLeft}
-        onClickOpponentAvatar={onClickOpponentAvatar}
-        onClickPlayerAvatar={onClickPlayerAvatar}
-      />
+      {!isPracticeMode ? (
+        <ScoreHeader
+          currentMaxTime={state.currentMaxTime}
+          opponent={state.opponent}
+          opponentId={opponentId}
+          opponentScore={state.opponentScore}
+          playerAvatarHtml={playerAvatarHtml}
+          playerId={playerId}
+          playerScore={state.playerScore}
+          timeLeft={state.timeLeft}
+          onClickOpponentAvatar={onClickOpponentAvatar}
+          onClickPlayerAvatar={onClickPlayerAvatar}
+        />
+      ) : null}
 
-      <AnimatePresence mode="wait">
-        {state.animations.rankText ? (
-          <motion.div
-            key={state.animations.rankText.timestamp}
-            animate="animate"
-            className="rank-text"
-            exit="exit"
-            id="rank-text"
-            initial="initial"
-            variants={rankTextVariants}
-          >
-            {state.animations.rankText.text}
-          </motion.div>
-        ) : null}
-      </AnimatePresence>
+      {!isPracticeMode ? (
+        <AnimatePresence mode="wait">
+          {state.animations.rankText ? (
+            <motion.div
+              key={state.animations.rankText.timestamp}
+              animate="animate"
+              className="rank-text"
+              exit="exit"
+              id="rank-text"
+              initial="initial"
+              variants={rankTextVariants}
+            >
+              {state.animations.rankText.text}
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
+      ) : null}
 
       <QuestionSection
         correctAnswer={state.correctAnswer}
@@ -109,6 +114,7 @@ export function GameBoard({
         playerCorrect={state.playerCorrect}
         playerScore={state.playerScore}
         playerSelection={state.playerSelection}
+        practiceMode={isPracticeMode}
         question={state.currentQuestion}
         optionWrapChars={optionWrapChars}
         titleSpacingPx={titleSpacingPx}

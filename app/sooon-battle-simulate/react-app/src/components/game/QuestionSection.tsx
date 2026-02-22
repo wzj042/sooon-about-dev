@@ -1,7 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
+import type { Variants } from 'framer-motion'
 
 import { optionListVariants, optionVariants, questionTextVariants } from '../../animations/motionPresets'
+import { MOTION_EASE } from '../../animations/transitions'
 import {
   DEFAULT_OPTION_WRAP_CHARS,
   DEFAULT_TITLE_WRAP_CHARS,
@@ -24,6 +26,7 @@ interface QuestionSectionProps {
   playerScore: number
   opponentScore: number
   maxScore: number
+  practiceMode: boolean
   optionWrapChars: number
   titleSpacingPx: number
   titleWrapChars: number
@@ -31,11 +34,67 @@ interface QuestionSectionProps {
   onSelect: (index: number) => void
 }
 
+const QUESTION_ACTIVATION_DELAY_MS = 850
+const PRACTICE_QUESTION_ACTIVATION_DELAY_MS = 120
+
+const practiceQuestionTextVariants: Variants = {
+  initial: { opacity: 0 },
+  animate: {
+    opacity: 1,
+    transition: { duration: 0.14, ease: MOTION_EASE.inOut },
+  },
+  exit: {
+    opacity: 0,
+    y: -10,
+    scale: 0.95,
+    transition: { duration: 0.12, ease: MOTION_EASE.inOut },
+  },
+}
+
+const practiceOptionListVariants: Variants = {
+  initial: {},
+  animate: {
+    transition: {
+      delayChildren: 0.04,
+      staggerChildren: 0.03,
+      staggerDirection: 1,
+    },
+  },
+  exit: {
+    y: -10,
+    scale: 0.95,
+    opacity: 0,
+    transition: {
+      duration: 0.12,
+      ease: MOTION_EASE.inOut,
+      staggerChildren: 0.02,
+      staggerDirection: 1,
+    },
+  },
+}
+
+const practiceOptionVariants: Variants = {
+  initial: { opacity: 0, y: 8, scale: 0.98 },
+  animate: {
+    opacity: 1,
+    y: 0,
+    scale: 1,
+    transition: { duration: 0.16, ease: MOTION_EASE.inOut },
+  },
+  exit: {
+    opacity: 0,
+    y: -6,
+    transition: { duration: 0.1, ease: MOTION_EASE.inOut },
+  },
+}
+
 function shouldShowOpponentResult(
+  practiceMode: boolean,
   gamePhase: GamePhase,
   playerSelection: number | null,
   opponentSelection: number | null,
 ): boolean {
+  if (practiceMode) return false
   if (opponentSelection === null) return false
   if (playerSelection !== null) return true
   return gamePhase === 'result' || gamePhase === 'ended'
@@ -108,82 +167,129 @@ export function QuestionSection({
   playerScore,
   opponentScore,
   maxScore,
+  practiceMode,
   optionWrapChars,
   titleSpacingPx,
   titleWrapChars,
   onQuestionShown,
   onSelect,
 }: QuestionSectionProps) {
-  const showOpponentResult = shouldShowOpponentResult(gamePhase, playerSelection, opponentSelection)
+  const showOpponentResult = shouldShowOpponentResult(practiceMode, gamePhase, playerSelection, opponentSelection)
   const [optionsVisible, setOptionsVisible] = useState(true)
+  const [roundContentVisible, setRoundContentVisible] = useState(true)
   const [questionShownNotified, setQuestionShownNotified] = useState(false)
+  const questionShownNotifiedRef = useRef(false)
+  const activationTimerRef = useRef<number | null>(null)
 
   const safeMaxScore = maxScore > 0 ? maxScore : 1
   const leftProgress = Math.min(100, Number(((playerScore / safeMaxScore) * 100).toFixed(3)))
   const rightProgress = Math.min(100, Number(((opponentScore / safeMaxScore) * 100).toFixed(3)))
   const normalizedTitleSpacingPx = normalizeTitleSpacingPx(titleSpacingPx)
   const renderedQuestionText = formatQuestionText(question ?? 'Loading question...', titleWrapChars)
+  const questionActivationDelay = practiceMode ? PRACTICE_QUESTION_ACTIVATION_DELAY_MS : QUESTION_ACTIVATION_DELAY_MS
+  const currentQuestionTextVariants = practiceMode ? practiceQuestionTextVariants : questionTextVariants
+  const currentOptionListVariants = practiceMode ? practiceOptionListVariants : optionListVariants
+  const currentOptionVariants = practiceMode ? practiceOptionVariants : optionVariants
 
   useEffect(() => {
     if (gamePhase === 'question' || gamePhase === 'waiting') {
       setOptionsVisible(true)
+      setRoundContentVisible(true)
     }
   }, [gamePhase, question, options])
 
   useEffect(() => {
+    if (activationTimerRef.current !== null) {
+      window.clearTimeout(activationTimerRef.current)
+      activationTimerRef.current = null
+    }
+    questionShownNotifiedRef.current = false
     setQuestionShownNotified(false)
   }, [question, options])
 
   useEffect(() => {
+    return () => {
+      if (activationTimerRef.current !== null) {
+        window.clearTimeout(activationTimerRef.current)
+        activationTimerRef.current = null
+      }
+    }
+  }, [])
+
+  const scheduleQuestionShown = useCallback(() => {
+    if (questionShownNotifiedRef.current) return
+    questionShownNotifiedRef.current = true
+    setQuestionShownNotified(true)
+
+    if (activationTimerRef.current !== null) {
+      window.clearTimeout(activationTimerRef.current)
+    }
+    activationTimerRef.current = window.setTimeout(() => {
+      activationTimerRef.current = null
+      onQuestionShown()
+    }, questionActivationDelay)
+  }, [onQuestionShown, questionActivationDelay])
+
+  useEffect(() => {
     if (gamePhase !== 'waiting') return
-    if (options.length > 0) return
     if (questionShownNotified) return
 
-    setQuestionShownNotified(true)
-    onQuestionShown()
-  }, [gamePhase, onQuestionShown, options.length, questionShownNotified])
+    scheduleQuestionShown()
+  }, [gamePhase, questionShownNotified, scheduleQuestionShown])
 
   useEffect(() => {
     if (optionsExitAnimationTimestamp === null) return
+    if (practiceMode) {
+      // In practice mode, let title and options leave together to avoid title-only drop.
+      setRoundContentVisible(false)
+      setOptionsVisible(false)
+      return
+    }
     setOptionsVisible(false)
-  }, [optionsExitAnimationTimestamp])
+  }, [optionsExitAnimationTimestamp, practiceMode])
 
   return (
     <div className="question-section" style={{ display: gamePhase === 'ended' ? 'none' : '' }}>
-      <div className="progress-bar left-progress">
-        <div className="progress-fill" id="left-progress-fill" style={{ height: `${leftProgress}%` }} />
-      </div>
+      {!practiceMode ? (
+        <div className="progress-bar left-progress">
+          <div className="progress-fill" id="left-progress-fill" style={{ height: `${leftProgress}%` }} />
+        </div>
+      ) : null}
 
       <div className="question-content">
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={question ?? 'question-loading'}
-            animate="animate"
-            className="question-text"
-            exit="exit"
-            initial="initial"
-            style={{ marginBottom: `calc(${normalizedTitleSpacingPx}px * var(--scale-factor))` }}
-            variants={questionTextVariants}
-          >
-            {renderedQuestionText}
-          </motion.div>
+        <AnimatePresence mode={practiceMode ? 'sync' : 'wait'}>
+          {roundContentVisible ? (
+            <motion.div
+              key={question ?? 'question-loading'}
+              animate="animate"
+              className="question-text"
+              exit="exit"
+              initial="initial"
+              style={{ marginBottom: `calc(${normalizedTitleSpacingPx}px * var(--scale-factor))` }}
+              variants={currentQuestionTextVariants}
+            >
+              {renderedQuestionText}
+            </motion.div>
+          ) : null}
         </AnimatePresence>
 
         <AnimatePresence mode="wait">
-          {optionsVisible ? (
+          {roundContentVisible && optionsVisible ? (
             <motion.div
               key={question ?? 'question-loading'}
               animate="animate"
               className={`options-container ${playerSelection !== null ? 'has-selection' : ''}`.trim()}
               exit="exit"
               initial="initial"
-              variants={optionListVariants}
+              variants={currentOptionListVariants}
             >
               {options.map((option, index) => {
                 const isSelected = playerSelection === index
                 const isCorrectOption = correctAnswer === index
                 const isWrongSelected = isSelected && playerCorrect === false
-                const revealCorrect = (gamePhase === 'result' || gamePhase === 'ended') && isCorrectOption
+                const revealCorrect =
+                  ((gamePhase === 'result' || gamePhase === 'ended') || (practiceMode && playerSelection !== null && playerCorrect === false)) &&
+                  isCorrectOption
                 const disabled = playerSelection !== null || gamePhase !== 'question'
                 const renderedOptionText = formatOptionText(option, optionWrapChars)
 
@@ -198,6 +304,8 @@ export function QuestionSection({
                   .join(' ')
 
                 const showOpponentIcon = showOpponentResult && opponentSelection === index && opponentCorrect !== null
+                const showPracticeCorrectIcon =
+                  practiceMode && revealCorrect && playerSelection !== index && playerCorrect === false
                 const opponentClassName = [
                   'opponent-result',
                   showOpponentIcon ? 'show' : '',
@@ -211,21 +319,13 @@ export function QuestionSection({
                     key={`${question ?? 'question-loading'}-${index}`}
                     className={classNames}
                     data-option={index + 1}
-                    variants={optionVariants}
-                    onAnimationComplete={(definition) => {
-                      if (definition !== 'animate') return
-                      if (index !== options.length - 1) return
-                      if (gamePhase !== 'waiting') return
-                      if (questionShownNotified) return
-
-                      setQuestionShownNotified(true)
-                      onQuestionShown()
-                    }}
+                    variants={currentOptionVariants}
                     onClick={() => {
                       if (!disabled) onSelect(index)
                     }}
                   >
                     {isSelected && playerCorrect !== null ? <PlayerSelectionIcon isCorrect={Boolean(playerCorrect)} /> : null}
+                    {showPracticeCorrectIcon ? <PlayerSelectionIcon isCorrect /> : null}
                     <div className="option-text">{renderedOptionText}</div>
                     <div className={opponentClassName} data-option={index + 1}>
                       {showOpponentIcon ? <OpponentResultIcon isCorrect={opponentCorrect} /> : null}
@@ -238,9 +338,11 @@ export function QuestionSection({
         </AnimatePresence>
       </div>
 
-      <div className="progress-bar right-progress">
-        <div className="progress-fill" id="right-progress-fill" style={{ height: `${rightProgress}%` }} />
-      </div>
+      {!practiceMode ? (
+        <div className="progress-bar right-progress">
+          <div className="progress-fill" id="right-progress-fill" style={{ height: `${rightProgress}%` }} />
+        </div>
+      ) : null}
     </div>
   )
 }
