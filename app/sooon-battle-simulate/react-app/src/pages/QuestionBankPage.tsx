@@ -295,7 +295,10 @@ export function QuestionBankPage() {
   const resizingColumnRef = useRef<{ key: ColumnKey; startX: number; startWidth: number } | null>(null)
 
   const [scrollTop, setScrollTop] = useState(0)
+  const [scrollLeft, setScrollLeft] = useState(0)
   const [viewportHeight, setViewportHeight] = useState(VIRTUAL_FALLBACK_VIEWPORT_HEIGHT)
+  const [viewportWidth, setViewportWidth] = useState(0)
+  const [scrollContentWidth, setScrollContentWidth] = useState(0)
   const deferredRows = useDeferredValue(rows)
 
   useEffect(() => {
@@ -492,8 +495,12 @@ export function QuestionBankPage() {
 
   useEffect(() => {
     const node = scrollContainerRef.current
-    if (node) node.scrollTop = 0
+    if (node) {
+      node.scrollTop = 0
+      node.scrollLeft = 0
+    }
     setScrollTop(0)
+    setScrollLeft(0)
   }, [normalizedKeyword, selectedType, shuffleTick, sortMode, statsFilterMode, typeFilter])
 
   useEffect(() => {
@@ -503,17 +510,29 @@ export function QuestionBankPage() {
     const readViewportHeight = (): number => {
       return node.clientHeight > 0 ? node.clientHeight : VIRTUAL_FALLBACK_VIEWPORT_HEIGHT
     }
+    const readViewportWidth = (): number => {
+      return node.clientWidth > 0 ? node.clientWidth : 0
+    }
+    const readScrollContentWidth = (): number => {
+      return node.scrollWidth > 0 ? node.scrollWidth : 0
+    }
 
     const onScroll = () => {
       setScrollTop(node.scrollTop)
+      setScrollLeft(node.scrollLeft)
     }
 
     const onResize = () => {
       setViewportHeight(readViewportHeight())
+      setViewportWidth(readViewportWidth())
+      setScrollContentWidth(readScrollContentWidth())
     }
 
     setScrollTop(node.scrollTop)
+    setScrollLeft(node.scrollLeft)
     setViewportHeight(readViewportHeight())
+    setViewportWidth(readViewportWidth())
+    setScrollContentWidth(readScrollContentWidth())
 
     node.addEventListener('scroll', onScroll, { passive: true })
     window.addEventListener('resize', onResize)
@@ -605,6 +624,10 @@ export function QuestionBankPage() {
   const scrollProgressRatio = canShowScrollSlider && maxScrollTop > 0 ? Math.min(1, Math.max(0, scrollTop / maxScrollTop)) : 0
   const scrollProgressHeight = sliderTrackHeight * scrollProgressRatio
   const scrollProgressPercent = Math.round(scrollProgressRatio * 100)
+  const maxScrollLeft = Math.max(0, scrollContentWidth - viewportWidth)
+  const canShowHorizontalProgress = !loading && scrollContentWidth > viewportWidth + 1
+  const horizontalProgressRatio = canShowHorizontalProgress && maxScrollLeft > 0 ? Math.min(1, Math.max(0, scrollLeft / maxScrollLeft)) : 0
+  const horizontalProgressPercent = Math.round(horizontalProgressRatio * 100)
 
   const syncScrollFromThumb = (thumbTop: number) => {
     if (!canShowScrollSlider) return
@@ -684,6 +707,14 @@ export function QuestionBankPage() {
     const width = visibleColumnDefs.reduce((sum, column) => sum + (columnWidths[column.key] ?? column.defaultWidth), 0)
     return Math.max(MIN_TABLE_WIDTH_PX, width)
   }, [columnWidths, visibleColumnDefs])
+
+  useEffect(() => {
+    const node = scrollContainerRef.current
+    if (!node) return
+
+    setViewportWidth(node.clientWidth > 0 ? node.clientWidth : 0)
+    setScrollContentWidth(node.scrollWidth > 0 ? node.scrollWidth : 0)
+  }, [tableMinWidthPx, columnWidths, visibleColumnDefs.length, filteredRows.length])
 
   const toggleColumnVisibility = (key: ColumnKey) => {
     setVisibleColumns((previous) => {
@@ -883,8 +914,8 @@ export function QuestionBankPage() {
   }
 
   return (
-    <main className="min-h-screen min-h-[100svh] min-h-[100dvh] overflow-x-hidden overflow-y-auto bg-[linear-gradient(180deg,#eaf4ff_0%,#f6faff_48%,#eef6ff_100%)] px-3 py-3 text-slate-900 sm:px-4 sm:py-8">
-      <div className="mx-auto flex min-h-[calc(100svh-1.5rem)] min-h-[calc(100dvh-1.5rem)] w-full max-w-[1320px] flex-col sm:min-h-[calc(100svh-4rem)] sm:min-h-[calc(100dvh-4rem)]">
+    <main className="h-screen h-[100svh] h-[100dvh] overflow-x-hidden overflow-y-auto bg-[linear-gradient(180deg,#eaf4ff_0%,#f6faff_48%,#eef6ff_100%)] px-3 py-3 text-slate-900 sm:overflow-hidden sm:px-4 sm:py-8">
+      <div className="mx-auto flex min-h-full w-full max-w-[1320px] flex-col sm:h-full">
         <section className="rounded-2xl border border-[#2196f3]/15 bg-white/95 p-4 shadow-[0_12px_28px_rgba(33,150,243,0.12)] sm:p-8">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
@@ -1027,7 +1058,7 @@ export function QuestionBankPage() {
           {error ? <p className="mt-3 rounded-md bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p> : null}
         </section>
 
-        <section className="relative mt-3 flex min-h-[56svh] min-h-[56dvh] flex-1 overflow-hidden rounded-2xl border border-[#2196f3]/20 bg-white/95 shadow-[0_14px_32px_rgba(33,150,243,0.14)] sm:mt-4 sm:min-h-0">
+        <section className="relative mt-3 flex min-h-[360px] flex-1 overflow-hidden rounded-2xl border border-[#2196f3]/20 bg-white/95 shadow-[0_14px_32px_rgba(33,150,243,0.14)] sm:mt-4 sm:min-h-0">
           <div className="h-full w-full overflow-auto pr-1" ref={scrollContainerRef}>
             <table className="table-fixed text-left text-sm" style={{ minWidth: `${tableMinWidthPx}px` }}>
               <thead className="sticky top-0 z-10 bg-[#e8f3ff] text-xs uppercase tracking-wide text-[#1b5fa6]">
@@ -1148,9 +1179,24 @@ export function QuestionBankPage() {
               </div>
             </div>
           ) : null}
+
+          {canShowHorizontalProgress ? (
+            <div className="pointer-events-none absolute bottom-1 left-2 right-2 z-20 sm:bottom-2">
+              <div
+                aria-label={`Table horizontal scroll progress ${horizontalProgressPercent}%`}
+                aria-valuemax={100}
+                aria-valuemin={0}
+                aria-valuenow={horizontalProgressPercent}
+                className="relative h-1.5 overflow-hidden rounded-full bg-[#cfe5fb]/90"
+                role="progressbar"
+                title={`Horizontal scroll progress ${horizontalProgressPercent}%`}
+              >
+                <div className="absolute left-0 top-0 h-full rounded-full bg-[#2196f3]/90" style={{ width: `${horizontalProgressRatio * 100}%` }} />
+              </div>
+            </div>
+          ) : null}
         </section>
       </div>
     </main>
   )
 }
-
