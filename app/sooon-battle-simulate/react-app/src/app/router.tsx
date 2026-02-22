@@ -1,4 +1,4 @@
-﻿import { createBrowserRouter } from 'react-router-dom'
+import { createBrowserRouter, createHashRouter } from 'react-router-dom'
 
 import { AboutPage } from '../pages/AboutPage'
 import { GamePage } from '../pages/GamePage'
@@ -6,7 +6,7 @@ import { HomePage } from '../pages/HomePage'
 import { QuestionBankPage } from '../pages/QuestionBankPage'
 import { APP_BASE_URL, APP_ROUTES, normalizeRouterBasename } from './paths'
 
-export const router = createBrowserRouter([
+const routeTable = [
   {
     path: APP_ROUTES.home,
     element: <HomePage />,
@@ -27,6 +27,12 @@ export const router = createBrowserRouter([
     path: APP_ROUTES.questionBank,
     element: <QuestionBankPage />,
   },
-], {
-  basename: normalizeRouterBasename(APP_BASE_URL),
-})
+]
+
+const shouldUseHashRouter = import.meta.env.PROD && import.meta.env.VITE_ROUTER_MODE !== 'browser'
+
+export const router = shouldUseHashRouter
+  ? createHashRouter(routeTable)
+  : createBrowserRouter(routeTable, {
+      basename: normalizeRouterBasename(APP_BASE_URL),
+    })
