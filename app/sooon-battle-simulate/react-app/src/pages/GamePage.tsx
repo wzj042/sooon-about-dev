@@ -88,6 +88,8 @@ export function GamePage() {
       gamePhase: state.gamePhase,
       maxScore: state.maxScore,
       practiceQueueMode: state.practiceQueueMode,
+      practiceQueueTotal: state.practiceQueueTotal,
+      practiceQueuePracticed: state.practiceQueuePracticed,
       questionLoadError: state.questionLoadError,
     })),
   )

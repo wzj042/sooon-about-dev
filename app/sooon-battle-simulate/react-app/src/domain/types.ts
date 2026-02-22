@@ -93,6 +93,8 @@ export interface GameState {
   aiAccuracy: number
   questionSelectionStrategy: QuestionSelectionStrategy
   practiceQueueMode: boolean
+  practiceQueueTotal: number
+  practiceQueuePracticed: number
 
   questionLoadError: string | null
 }

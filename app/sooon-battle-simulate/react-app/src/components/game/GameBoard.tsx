@@ -25,6 +25,9 @@ interface GameBoardProps {
     | 'correctAnswer'
     | 'gamePhase'
     | 'maxScore'
+    | 'practiceQueueMode'
+    | 'practiceQueueTotal'
+    | 'practiceQueuePracticed'
   >
   playerAvatarHtml: string
   playerId: string
@@ -118,6 +121,9 @@ export function GameBoard({
         autoSkipEndScreen={autoSkipEndScreen}
         opponentScore={state.opponentScore}
         playerScore={state.playerScore}
+        practiceQueueMode={state.practiceQueueMode}
+        practiceQueuePracticed={state.practiceQueuePracticed}
+        practiceQueueTotal={state.practiceQueueTotal}
         visible={isGameEnded}
         onToggleAutoSkipEndScreen={onToggleAutoSkipEndScreen}
         onContinue={onContinue}

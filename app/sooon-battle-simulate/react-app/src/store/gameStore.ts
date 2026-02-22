@@ -9,6 +9,7 @@ import { averageResponseMs, getQuestionStat, isCommonSenseType, isEthicsType, lo
 import { TimerRegistry } from './timers'
 
 const DEFAULT_TOTAL_ROUNDS = 5
+const PRACTICE_QUEUE_ROUNDS = 5
 const TIMER_TICK_MS = 80
 const DEFAULT_MAX_SCORE = 900
 const DEFAULT_QUESTION_SELECTION_STRATEGY: QuestionSelectionStrategy = 'shuffled_traversal_recent_first'
@@ -65,6 +66,8 @@ const DEFAULT_STATE = {
   aiAccuracy: 0.6,
   questionSelectionStrategy: DEFAULT_QUESTION_SELECTION_STRATEGY,
   practiceQueueMode: false,
+  practiceQueueTotal: 0,
+  practiceQueuePracticed: 0,
 
   questionLoadError: null as string | null,
 }
@@ -396,16 +399,12 @@ export const useGameStore = create<GameStore>((set, get) => {
 
   const maybeGoNext = () => {
     const state = get()
-    if (state.practiceQueueMode) {
+    if (state.currentRound < state.totalRounds) {
       get().nextRound()
       return
     }
 
-    if (state.currentRound < state.totalRounds) {
-      get().nextRound()
-    } else {
-      get().endGame()
-    }
+    get().endGame()
   }
 
   const showResultsInternal = () => {
@@ -441,6 +440,9 @@ export const useGameStore = create<GameStore>((set, get) => {
     set((current) => ({
       gamePhase: 'result',
       history: [...current.history, roundResult],
+      practiceQueuePracticed: current.practiceQueueMode
+        ? Math.min(current.practiceQueueTotal, Math.max(current.practiceQueuePracticed, current.currentRound))
+        : 0,
       animations: {
         ...current.animations,
         optionsExitAnimation: { timestamp: Date.now() },
@@ -571,7 +573,7 @@ export const useGameStore = create<GameStore>((set, get) => {
     await ensureQuestionsPrepared(current.totalRounds)
 
     const questionData = getRoundQuestion(round)
-    const isFinalRound = !current.practiceQueueMode && round === current.totalRounds
+    const isFinalRound = round === current.totalRounds
     const timeForRound = isFinalRound ? current.maxTime * 2 : current.maxTime
 
     set((state) => ({
@@ -616,6 +618,7 @@ export const useGameStore = create<GameStore>((set, get) => {
       currentRound: 1,
       playerScore: 0,
       opponentScore: 0,
+      practiceQueuePracticed: 0,
       timeLeft: state.maxTime,
       currentMaxTime: state.maxTime,
       timerRunning: false,
@@ -747,10 +750,12 @@ export const useGameStore = create<GameStore>((set, get) => {
     setPracticeQueue: (questions) => {
       practiceQueueQuestions = questions
       selectedQuestions = []
-      const normalizedTotalRounds = Math.max(1, questions.length)
+      const normalizedTotalRounds = Math.max(1, Math.min(PRACTICE_QUEUE_ROUNDS, questions.length))
       set({
         totalRounds: normalizedTotalRounds,
         practiceQueueMode: questions.length > 0,
+        practiceQueueTotal: questions.length > 0 ? questions.length : 0,
+        practiceQueuePracticed: 0,
       })
     },
 
@@ -784,6 +789,8 @@ export const useGameStore = create<GameStore>((set, get) => {
           initialized: false,
         },
         practiceQueueMode: false,
+        practiceQueueTotal: 0,
+        practiceQueuePracticed: 0,
         questionLoadError: null,
       })
       practiceQueueQuestions = []

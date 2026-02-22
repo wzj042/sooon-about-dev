@@ -4,6 +4,9 @@ interface EndScreenProps {
   visible: boolean
   playerScore: number
   opponentScore: number
+  practiceQueueMode: boolean
+  practiceQueueTotal: number
+  practiceQueuePracticed: number
   autoSkipEndScreen: boolean
   onToggleAutoSkipEndScreen: (enabled: boolean) => void
   onContinue: () => void
@@ -31,6 +34,9 @@ export function EndScreen({
   visible,
   playerScore,
   opponentScore,
+  practiceQueueMode,
+  practiceQueueTotal,
+  practiceQueuePracticed,
   autoSkipEndScreen,
   onToggleAutoSkipEndScreen,
   onContinue,
@@ -63,6 +69,10 @@ export function EndScreen({
     }
   }, [autoSkipEndScreen, onContinue, visible])
 
+  const safeQueueTotal = Math.max(0, Math.floor(practiceQueueTotal))
+  const safeQueuePracticed = Math.min(safeQueueTotal, Math.max(0, Math.floor(practiceQueuePracticed)))
+  const safeQueueRemaining = Math.max(0, safeQueueTotal - safeQueuePracticed)
+
   return (
     <div className="end-screen" id="end-screen" style={{ display: visible ? 'flex' : 'none' }}>
       <div className="end-title" id="end-title">
@@ -71,6 +81,12 @@ export function EndScreen({
       <div className="end-emoji" id="end-emoji">
         {frames[frameIndex]}
       </div>
+      {practiceQueueMode ? (
+        <>
+          <div className="setting-description">当前队列剩余题数：{safeQueueRemaining}</div>
+          <div className="setting-description">当前已练习队列题数：{safeQueuePracticed}</div>
+        </>
+      ) : null}
       <div className="checkbox-setting">
         <input
           checked={autoSkipEndScreen}

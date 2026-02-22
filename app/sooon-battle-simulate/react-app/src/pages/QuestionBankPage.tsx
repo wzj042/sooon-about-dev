@@ -21,6 +21,7 @@ const ANSWER_LABELS = ['A', 'B', 'C', 'D'] as const
 const VIRTUAL_ROW_HEIGHT = 188
 const VIRTUAL_OVERSCAN = 6
 const VIRTUAL_FALLBACK_VIEWPORT_HEIGHT = 640
+const MAX_VIRTUAL_RENDER_ROWS = 28
 const SLIDER_MIN_THUMB_HEIGHT = 40
 const MIN_TABLE_WIDTH_PX = 1200
 const OPTIONS_REVEAL_SESSION_KEY = 'question-bank-options-reveal-map'
@@ -600,9 +601,10 @@ export function QuestionBankPage() {
       }
     }
 
-    const safeViewportHeight = Math.max(viewportHeight, VIRTUAL_FALLBACK_VIEWPORT_HEIGHT)
+    const safeViewportHeight = viewportHeight > 0 ? viewportHeight : VIRTUAL_FALLBACK_VIEWPORT_HEIGHT
     const startIndex = Math.max(0, Math.floor(scrollTop / VIRTUAL_ROW_HEIGHT) - VIRTUAL_OVERSCAN)
-    const renderCount = Math.ceil(safeViewportHeight / VIRTUAL_ROW_HEIGHT) + VIRTUAL_OVERSCAN * 2
+    const rawRenderCount = Math.ceil(safeViewportHeight / VIRTUAL_ROW_HEIGHT) + VIRTUAL_OVERSCAN * 2
+    const renderCount = Math.min(MAX_VIRTUAL_RENDER_ROWS, Math.max(VIRTUAL_OVERSCAN * 2 + 1, rawRenderCount))
     const endIndex = Math.min(filteredRows.length - 1, startIndex + renderCount - 1)
 
     return {
