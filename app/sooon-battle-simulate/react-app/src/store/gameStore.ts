@@ -207,6 +207,19 @@ function filterMasteryAwareQuestionBank(bank: QuestionItem[], strategy: Question
   return nonMastered.length > 0 ? nonMastered : bank
 }
 
+function dedupeQuestionBank(bank: QuestionItem[]): QuestionItem[] {
+  const used = new Set<string>()
+  const deduped: QuestionItem[] = []
+
+  for (const item of bank) {
+    if (!item.question || used.has(item.question)) continue
+    used.add(item.question)
+    deduped.push(item)
+  }
+
+  return deduped
+}
+
 export const useGameStore = create<GameStore>((set, get) => {
   const timers = new TimerRegistry()
 
@@ -320,7 +333,8 @@ export const useGameStore = create<GameStore>((set, get) => {
       return
     }
 
-    const candidateBank = filterMasteryAwareQuestionBank(questionBank, strategy)
+    const dedupedBank = dedupeQuestionBank(questionBank)
+    const candidateBank = dedupeQuestionBank(filterMasteryAwareQuestionBank(dedupedBank, strategy))
 
     if (selectedQuestions.length !== requiredCount) {
       if (strategy === 'unseen_first') {
@@ -341,6 +355,20 @@ export const useGameStore = create<GameStore>((set, get) => {
 
       if (selectedQuestions.length === 0) {
         selectedQuestions = buildWeightedRecentTraversal(candidateBank, requiredCount)
+      }
+
+      if (selectedQuestions.length < requiredCount) {
+        const used = new Set(selectedQuestions.map((item) => item.question))
+        const fallbackPool = dedupedBank.filter((item) => !used.has(item.question))
+        const supplements = buildWeightedRecentTraversal(fallbackPool, requiredCount - selectedQuestions.length)
+        if (supplements.length > 0) {
+          selectedQuestions = [...selectedQuestions, ...supplements]
+        }
+      }
+
+      // If unique question count is lower than requested rounds, shrink round count to avoid repeats via modulo.
+      if (selectedQuestions.length > 0 && selectedQuestions.length < requiredCount) {
+        set({ totalRounds: selectedQuestions.length })
       }
     }
   }
