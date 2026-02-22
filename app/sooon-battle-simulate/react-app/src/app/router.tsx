@@ -3,6 +3,7 @@ import { createBrowserRouter, createHashRouter } from 'react-router-dom'
 import { AboutPage } from '../pages/AboutPage'
 import { GamePage } from '../pages/GamePage'
 import { HomePage } from '../pages/HomePage'
+import { QueuePracticePage } from '../pages/QueuePracticePage'
 import { QuestionBankPage } from '../pages/QuestionBankPage'
 import { APP_BASE_URL, APP_ROUTES, normalizeRouterBasename } from './paths'
 
@@ -18,6 +19,10 @@ const routeTable = [
   {
     path: APP_ROUTES.game,
     element: <GamePage />,
+  },
+  {
+    path: APP_ROUTES.queuePractice,
+    element: <QueuePracticePage />,
   },
   {
     path: APP_ROUTES.about,

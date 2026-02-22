@@ -4,6 +4,7 @@ export const APP_ROUTES = {
   home: '/',
   homeHtml: '/index.html',
   game: '/game',
+  queuePractice: '/queue-practice',
   about: '/about',
   questionBank: '/question-bank',
 } as const
