@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { APP_ROUTES } from '../app/paths'
-import { loadLastPracticeQueueSession } from '../services/practiceQueue'
+import { loadLastPracticeQueueSession, subscribePracticeQueueSession } from '../services/practiceQueue'
 import {
   getQuestionStatsSummary,
   loadDailyQuestionStatsMap,
@@ -102,6 +102,20 @@ export function HomePage() {
   const [dailyStats, setDailyStats] = useState<DailyQuestionStatsMap>({})
 
   useEffect(() => {
+    const refreshQueueInfo = () => {
+      const session = loadLastPracticeQueueSession()
+      if (session) {
+        setLastQueueInfo({
+          count: session.questions.length,
+          cursor: session.cursor,
+          practicedCount: session.practicedCount,
+        })
+        return
+      }
+
+      setLastQueueInfo(null)
+    }
+
     const refreshSummary = () => {
       const map = loadQuestionStatsMap()
       setSummary(getQuestionStatsSummary(map))
@@ -112,24 +126,18 @@ export function HomePage() {
     }
 
     refreshSummary()
-    const unsubscribe = subscribeQuestionStats(refreshSummary)
+    refreshQueueInfo()
+    const unsubscribeStats = subscribeQuestionStats(refreshSummary)
+    const unsubscribeQueue = subscribePracticeQueueSession(refreshQueueInfo)
 
     void loadTotalQuestionCount().then((count) => {
       if (count !== null) setTotalQuestions(count)
     })
 
-    const session = loadLastPracticeQueueSession()
-    if (session) {
-      setLastQueueInfo({
-        count: session.questions.length,
-        cursor: session.cursor,
-        practicedCount: session.practicedCount,
-      })
-    } else {
-      setLastQueueInfo(null)
+    return () => {
+      unsubscribeStats()
+      unsubscribeQueue()
     }
-
-    return unsubscribe
   }, [])
 
   const progressRatio = useMemo(() => {

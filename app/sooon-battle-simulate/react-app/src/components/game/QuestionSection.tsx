@@ -34,7 +34,7 @@ interface QuestionSectionProps {
   onSelect: (index: number) => void
 }
 
-const QUESTION_ACTIVATION_DELAY_MS = 850
+const QUESTION_ACTIVATION_DELAY_MS = 120
 const PRACTICE_QUESTION_ACTIVATION_DELAY_MS = 120
 
 const practiceQuestionTextVariants: Variants = {

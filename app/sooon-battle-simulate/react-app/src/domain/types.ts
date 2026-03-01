@@ -112,7 +112,7 @@ export interface GameActions {
   setAvatarFixed(fixed: boolean): void
   updateAIConfig(params: { accuracy?: number; speedMsRange?: [number, number] }): void
   updateQuestionSelectionStrategy(strategy: QuestionSelectionStrategy): void
-  setPracticeQueue(questions: QuestionItem[]): void
+  setPracticeQueue(questions: QuestionItem[], practicedCount?: number): void
   reset(): void
   destroy(): void
   debugSettle(mode?: number): void

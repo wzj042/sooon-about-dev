@@ -6,6 +6,7 @@ import { APP_ROUTES } from '../app/paths'
 import { GameBoard } from '../components/game/GameBoard'
 import { AppLayout } from '../components/layout/AppLayout'
 import { DEFAULT_AVATAR_SRC } from '../domain/avatar'
+import { loadLegacyConfig } from '../services/legacyStorageCompat'
 import {
   advanceLastPracticeQueueProgress,
   consumePracticeQueue,
@@ -25,6 +26,7 @@ function rotateQueueByCursor<T>(list: T[], cursor: number): T[] {
 }
 
 export function QueuePracticePage() {
+  const displayConfig = useMemo(() => loadLegacyConfig(), [])
   const gameState = useGameStore(
     useShallow((state) => ({
       playerScore: state.playerScore,
@@ -55,7 +57,7 @@ export function QueuePracticePage() {
   const selectAnswer = useGameStore((state) => state.selectAnswer)
   const setPracticeQueue = useGameStore((state) => state.setPracticeQueue)
   const [bootError, setBootError] = useState<string | null>(null)
-  const committedEndedRoundRef = useRef<number | null>(null)
+  const committedResultRoundRef = useRef<number | null>(null)
 
   const queueTotal = Math.max(0, Math.floor(gameState.practiceQueueTotal))
   const queuePracticed = Math.min(queueTotal, Math.max(0, Math.floor(gameState.practiceQueuePracticed)))
@@ -70,14 +72,22 @@ export function QueuePracticePage() {
 
     const bootstrap = async () => {
       const shouldResumeQueue = new URLSearchParams(window.location.search).get('resumeQueue') === '1'
-      let practiceQueue = consumePracticeQueue()
-      if (practiceQueue.length > 0) {
-        saveLastPracticeQueueSession(practiceQueue, 0, 0)
+      const lastSession = loadLastPracticeQueueSession()
+      let practiceQueue = [] as ReturnType<typeof consumePracticeQueue>
+      let initialPracticedCount = 0
+
+      if (shouldResumeQueue && lastSession) {
+        practiceQueue = rotateQueueByCursor(lastSession.questions, lastSession.cursor)
+        initialPracticedCount = lastSession.practicedCount
+        saveLastPracticeQueueSession(practiceQueue, 0, initialPracticedCount)
       } else {
-        const lastSession = loadLastPracticeQueueSession()
-        if (lastSession && (shouldResumeQueue || lastSession.questions.length > 0)) {
+        practiceQueue = consumePracticeQueue()
+        if (practiceQueue.length > 0) {
+          saveLastPracticeQueueSession(practiceQueue, 0, 0)
+        } else if (lastSession) {
           practiceQueue = rotateQueueByCursor(lastSession.questions, lastSession.cursor)
-          saveLastPracticeQueueSession(practiceQueue, 0, lastSession.practicedCount)
+          initialPracticedCount = lastSession.practicedCount
+          saveLastPracticeQueueSession(practiceQueue, 0, initialPracticedCount)
         }
       }
 
@@ -93,7 +103,7 @@ export function QueuePracticePage() {
         return
       }
 
-      setPracticeQueue(practiceQueue)
+      setPracticeQueue(practiceQueue, initialPracticedCount)
       if (cancelled) return
       await startNewGame()
     }
@@ -113,21 +123,17 @@ export function QueuePracticePage() {
 
   useEffect(() => {
     if (!gameState.practiceQueueMode) return
-    if (gameState.gamePhase !== 'ended') {
-      committedEndedRoundRef.current = null
+    if (gameState.gamePhase !== 'result') {
+      if (gameState.gamePhase === 'waiting' || gameState.gamePhase === 'question') {
+        committedResultRoundRef.current = null
+      }
       return
     }
-    if (committedEndedRoundRef.current === currentRound) return
+    if (committedResultRoundRef.current === currentRound) return
 
-    const session = loadLastPracticeQueueSession()
-    if (!session || session.questions.length <= 0) return
-
-    const delta = Math.max(0, Math.floor(currentRound))
-    if (delta <= 0) return
-
-    advanceLastPracticeQueueProgress(delta)
-    committedEndedRoundRef.current = currentRound
-  }, [currentRound, gameState.gamePhase, gameState.practiceQueueMode, gameState.practiceQueuePracticed])
+    advanceLastPracticeQueueProgress(1)
+    committedResultRoundRef.current = currentRound
+  }, [currentRound, gameState.gamePhase, gameState.practiceQueueMode])
 
   const footer = useMemo(
     () => (
@@ -156,12 +162,12 @@ export function QueuePracticePage() {
       <GameBoard
         autoSkipEndScreen={false}
         opponentId="Practice"
-        optionWrapChars={24}
+        optionWrapChars={displayConfig.optionWrapChars}
         playerAvatarHtml={DEFAULT_AVATAR_SRC}
         playerId="Practice"
         state={gameState}
-        titleSpacingPx={16}
-        titleWrapChars={20}
+        titleSpacingPx={displayConfig.titleSpacingPx}
+        titleWrapChars={displayConfig.titleWrapChars}
         onClickOpponentAvatar={() => undefined}
         onClickPlayerAvatar={() => undefined}
         onContinue={() => {

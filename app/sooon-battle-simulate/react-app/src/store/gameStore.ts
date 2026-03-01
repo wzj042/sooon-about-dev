@@ -12,6 +12,8 @@ const DEFAULT_TOTAL_ROUNDS = 5
 const TIMER_TICK_MS = 80
 const DEFAULT_MAX_SCORE = 900
 const DEFAULT_QUESTION_SELECTION_STRATEGY: QuestionSelectionStrategy = 'shuffled_traversal_recent_first'
+const FAST_RESULT_DELAY_MS = 280
+const FAST_WRONG_RESULT_DELAY_MS = 650
 
 const getDefaultAnimations = (): AnimationState => ({
   rankText: false,
@@ -415,9 +417,7 @@ export const useGameStore = create<GameStore>((set, get) => {
       })
     }
 
-    const queuePracticedInSession = state.practiceQueueMode
-      ? Math.min(state.practiceQueueTotal, practiceQueueProgress + state.currentRound)
-      : 0
+    const queuePracticedInSession = state.practiceQueueMode ? practiceQueueProgress + state.currentRound : 0
 
     set((current) => ({
       gamePhase: 'result',
@@ -432,7 +432,7 @@ export const useGameStore = create<GameStore>((set, get) => {
     timers.clearTrackedTimeout(resultTimeoutId)
     resultTimeoutId = timers.setTrackedTimeout(() => {
       maybeGoNext()
-    }, 1000)
+    }, state.playerCorrect === false ? FAST_WRONG_RESULT_DELAY_MS : FAST_RESULT_DELAY_MS)
   }
 
   const timeUpInternal = () => {
@@ -477,6 +477,7 @@ export const useGameStore = create<GameStore>((set, get) => {
     const state = get()
     const playerSelected = state.playerSelection !== null
     const opponentSelected = state.opponentSelection !== null
+    const resultDelayMs = state.playerCorrect === false ? FAST_WRONG_RESULT_DELAY_MS : FAST_RESULT_DELAY_MS
 
     if (state.practiceQueueMode && playerSelected) {
       stopTimer()
@@ -484,7 +485,7 @@ export const useGameStore = create<GameStore>((set, get) => {
       timers.clearTrackedTimeout(resultTimeoutId)
       resultTimeoutId = timers.setTrackedTimeout(() => {
         showResultsInternal()
-      }, state.playerCorrect === false ? 650 : 280)
+      }, resultDelayMs)
       return
     }
 
@@ -493,7 +494,7 @@ export const useGameStore = create<GameStore>((set, get) => {
       timers.clearTrackedTimeout(resultTimeoutId)
       resultTimeoutId = timers.setTrackedTimeout(() => {
         showResultsInternal()
-      }, 1500)
+      }, resultDelayMs)
       return
     }
 
@@ -636,7 +637,7 @@ export const useGameStore = create<GameStore>((set, get) => {
       if (advancedBy > 0) {
         const delta = Math.max(0, advancedBy - practiceQueueProgress)
         practiceQueueCursor = normalizeQueueCursor(practiceQueueCursor + delta, practiceQueueQuestions.length)
-        practiceQueueProgress = Math.min(state.practiceQueueTotal, practiceQueueProgress + delta)
+        practiceQueueProgress += delta
       }
     }
 
@@ -779,17 +780,17 @@ export const useGameStore = create<GameStore>((set, get) => {
       })
     },
 
-    setPracticeQueue: (questions) => {
+    setPracticeQueue: (questions, practicedCount = 0) => {
       practiceQueueQuestions = questions
       practiceQueueCursor = 0
-      practiceQueueProgress = 0
+      practiceQueueProgress = Math.max(0, Math.floor(practicedCount))
       selectedQuestions = []
       const normalizedTotalRounds = Math.max(1, questions.length)
       set({
         totalRounds: normalizedTotalRounds,
         practiceQueueMode: questions.length > 0,
         practiceQueueTotal: questions.length > 0 ? questions.length : 0,
-        practiceQueuePracticed: 0,
+        practiceQueuePracticed: questions.length > 0 ? practiceQueueProgress : 0,
       })
     },
 

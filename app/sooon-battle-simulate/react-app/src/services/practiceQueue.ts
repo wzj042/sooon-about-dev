@@ -16,11 +16,16 @@ interface LastPracticeQueueSessionPayload {
 const PRACTICE_QUEUE_KEY = 'sooon-practice-queue'
 const PRACTICE_QUEUE_FALLBACK_KEY = 'sooon-practice-queue-fallback'
 const LAST_PRACTICE_QUEUE_SESSION_KEY = 'sooon-last-practice-queue-session'
+const PRACTICE_QUEUE_SESSION_CHANGED_EVENT = 'sooon-practice-queue-session-changed'
 // Do not enforce an arbitrary small hard cap (legacy cap was 500).
 // Storage limits should be determined by browser capacity instead.
 const PRACTICE_QUEUE_MAX_ITEMS = Number.MAX_SAFE_INTEGER
 const PRACTICE_QUEUE_FALLBACK_TTL_MS = 5000
 export const MIN_PRACTICE_QUEUE_ITEMS = 5
+
+function emitPracticeQueueSessionChanged(): void {
+  window.dispatchEvent(new Event(PRACTICE_QUEUE_SESSION_CHANGED_EVENT))
+}
 
 function isValidQuestionItem(value: unknown): value is QuestionItem {
   if (!value || typeof value !== 'object') return false
@@ -116,6 +121,7 @@ export function saveLastPracticeQueueSession(questions: QuestionItem[], cursor =
     } catch {
       // no-op
     }
+    emitPracticeQueueSessionChanged()
     return 0
   }
 
@@ -127,6 +133,7 @@ export function saveLastPracticeQueueSession(questions: QuestionItem[], cursor =
   }
 
   setValue(LAST_PRACTICE_QUEUE_SESSION_KEY, payload)
+  emitPracticeQueueSessionChanged()
   return normalized.length
 }
 
@@ -157,4 +164,11 @@ export function advanceLastPracticeQueueProgress(delta: number): void {
   const nextPracticed = session.practicedCount + safeDelta
   const nextCursor = session.cursor + safeDelta
   saveLastPracticeQueueSession(session.questions, nextCursor, nextPracticed)
+}
+
+export function subscribePracticeQueueSession(handler: () => void): () => void {
+  window.addEventListener(PRACTICE_QUEUE_SESSION_CHANGED_EVENT, handler)
+  return () => {
+    window.removeEventListener(PRACTICE_QUEUE_SESSION_CHANGED_EVENT, handler)
+  }
 }

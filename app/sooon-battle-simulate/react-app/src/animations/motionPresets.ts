@@ -2,10 +2,10 @@ import type { Variants } from 'framer-motion'
 
 import { MOTION_DURATIONS, MOTION_EASE } from './transitions'
 
-const OPTION_ENTRANCE_BASE_DELAY = 1.7
-const OPTION_ENTRANCE_STAGGER = 0.1
-const OPTION_EXIT_STAGGER = 0.08
-const QUESTION_TEXT_DURATION = 1.6
+const OPTION_ENTRANCE_BASE_DELAY = 0.22
+const OPTION_ENTRANCE_STAGGER = 0.04
+const OPTION_EXIT_STAGGER = 0.03
+const QUESTION_TEXT_DURATION = 0.28
 
 export const rankTextVariants: Variants = {
   initial: { opacity: 0, scale: 0.5 },
