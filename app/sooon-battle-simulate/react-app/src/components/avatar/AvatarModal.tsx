@@ -107,13 +107,13 @@ export function AvatarModal({ open, context, currentAvatarHtml, onClose, onSave 
     })
   }, [open])
 
-  const title = context === 'player' ? '淇敼鐢ㄦ埛澶村儚' : '淇敼AI澶村儚'
+  const title = context === 'player' ? '修改玩家头像' : '修改 AI 头像'
 
   return (
     <Modal open={open} contentClassName="avatar-modal-content" title={title} onClose={onClose}>
       <div className="modal-body">
         <div className="current-avatar-section">
-          <div className="current-avatar-label">褰撳墠澶村儚</div>
+          <div className="current-avatar-label">当前头像</div>
           <div className="current-avatar-display" id="current-avatar-display">
             {selectedAvatar?.svg ? renderAvatarPreview(selectedAvatar.svg) : renderAvatarPreview(currentAvatarHtml)}
           </div>
@@ -169,7 +169,7 @@ export function AvatarModal({ open, context, currentAvatarHtml, onClose, onSave 
         </div>
 
         <div className="avatar-import-export">
-          <div className="import-export-label">澶村儚绠＄悊</div>
+          <div className="import-export-label">头像管理</div>
           <div className="import-export-buttons">
             <button
               className="btn btn-outline"
@@ -187,7 +187,7 @@ export function AvatarModal({ open, context, currentAvatarHtml, onClose, onSave 
                 URL.revokeObjectURL(url)
               }}
             >
-              瀵煎嚭澶村儚
+              导出头像
             </button>
             <button
               className="btn btn-outline"
@@ -195,7 +195,7 @@ export function AvatarModal({ open, context, currentAvatarHtml, onClose, onSave 
               type="button"
               onClick={() => fileInputRef.current?.click()}
             >
-              瀵煎叆澶村儚
+              导入头像
             </button>
             <input
               ref={fileInputRef}
@@ -224,7 +224,7 @@ export function AvatarModal({ open, context, currentAvatarHtml, onClose, onSave 
       </div>
       <div className="modal-footer">
         <button className="btn btn-secondary" id="cancel-avatar" type="button" onClick={onClose}>
-          鍙栨秷
+          取消
         </button>
         <button
           className="btn btn-primary"
@@ -235,7 +235,7 @@ export function AvatarModal({ open, context, currentAvatarHtml, onClose, onSave 
             onClose()
           }}
         >
-          淇濆瓨
+          保存
         </button>
       </div>
     </Modal>

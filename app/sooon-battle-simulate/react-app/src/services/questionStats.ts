@@ -107,6 +107,17 @@ export function saveQuestionStatsMap(map: QuestionStatsMap): void {
   emitQuestionStatsChanged()
 }
 
+export function clearQuestionHistory(): void {
+  try {
+    localStorage.removeItem(QUESTION_STATS_STORAGE_KEY)
+    localStorage.removeItem(QUESTION_DAILY_STATS_STORAGE_KEY)
+  } catch {
+    // Ignore storage errors and still notify listeners.
+  }
+
+  emitQuestionStatsChanged()
+}
+
 export function subscribeQuestionStats(handler: () => void): () => void {
   window.addEventListener(QUESTION_STATS_CHANGED_EVENT, handler)
   return () => {

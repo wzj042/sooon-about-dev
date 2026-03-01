@@ -28,6 +28,7 @@ import {
   saveLegacyDisplayConfig,
   saveLegacyQuestionSelectionStrategy,
 } from '../services/legacyStorageCompat'
+import { clearQuestionHistory } from '../services/questionStats'
 import { exportUserData, importUserData } from '../services/userDataTransfer'
 import { detachDebugSettle, attachDebugSettle } from '../store/actions/debug'
 import { useGameStore } from '../store/gameStore'
@@ -276,6 +277,17 @@ export function GamePage() {
     setUserDataTransferMessage(result.message)
   }
 
+  const handleClearQuestionHistory = () => {
+    const firstConfirmed = window.confirm('将删除当前浏览器中的历史答题记录，是否继续？')
+    if (!firstConfirmed) return
+
+    const secondConfirmed = window.confirm('删除后无法恢复。确认删除历史答题记录吗？')
+    if (!secondConfirmed) return
+
+    clearQuestionHistory()
+    setUserDataTransferMessage('历史答题记录已删除')
+  }
+
   const handleImportUserData = async (file: File) => {
     const confirmed = window.confirm('导入将覆盖当前本地用户数据，是否继续？')
     if (!confirmed) return
@@ -371,6 +383,7 @@ export function GamePage() {
         onImportUserData={(file) => {
           void handleImportUserData(file)
         }}
+        onClearQuestionHistory={handleClearQuestionHistory}
         userDataTransferBusy={userDataTransferBusy}
         userDataTransferMessage={userDataTransferMessage}
         disableQuestionSelectionStrategy={gameState.practiceQueueMode}

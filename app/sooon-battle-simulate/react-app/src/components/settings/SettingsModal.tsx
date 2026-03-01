@@ -52,6 +52,7 @@ interface SettingsModalProps {
   }) => void
   onExportUserData: () => void
   onImportUserData: (file: File) => void
+  onClearQuestionHistory: () => void
   userDataTransferBusy: boolean
   userDataTransferMessage: string | null
   disableQuestionSelectionStrategy?: boolean
@@ -108,6 +109,7 @@ export function SettingsModal({
   onApply,
   onExportUserData,
   onImportUserData,
+  onClearQuestionHistory,
   userDataTransferBusy,
   userDataTransferMessage,
   disableQuestionSelectionStrategy = false,
@@ -621,6 +623,16 @@ export function SettingsModal({
           </div>
           <div className="setting-description">手动备份或恢复当前浏览器中的本地用户数据</div>
           {userDataTransferMessage ? <div className="setting-description">{userDataTransferMessage}</div> : null}
+        </div>
+
+        <div className="setting-group">
+          <label className="setting-label">历史答题记录</label>
+          <div className="speed-inputs">
+            <button className="btn btn-outline" disabled={userDataTransferBusy} type="button" onClick={onClearQuestionHistory}>
+              删除历史答题记录
+            </button>
+          </div>
+          <div className="setting-description">清空答题统计、热力图与题目作答记录，操作前会二次确认</div>
         </div>
       </div>
 
