@@ -260,21 +260,8 @@ function areCacheStatesEqual(left: QuestionBankCacheState, right: QuestionBankCa
   )
 }
 
-interface BuildFilteredRowsParams {
-  sourceRows: QuestionItem[]
-  normalizedKeyword: string
-  selectedType: string
-  shuffleTick: number
-  sortMode: SortMode
-  statsFilterMode: StatsFilterMode
-  statsMap: QuestionStatsMap
-  typeFilter: TypeFilter
-}
-
-function buildFilteredRows(params: BuildFilteredRowsParams): TableRow[] {
-  const { normalizedKeyword, selectedType, shuffleTick, sortMode, sourceRows, statsFilterMode, statsMap, typeFilter } = params
-
-  const prepared: TableRow[] = sourceRows.map((item, originalIndex) => ({
+function prepareTableRows(sourceRows: QuestionItem[], statsMap: QuestionStatsMap): TableRow[] {
+  return sourceRows.map((item, originalIndex) => ({
     item,
     originalIndex,
     normalizedType: normalizeTypeValue(item.type),
@@ -284,20 +271,38 @@ function buildFilteredRows(params: BuildFilteredRowsParams): TableRow[] {
     lastAnsweredTimestamp: parseAnsweredTimestamp(statsMap[item.question]?.lastAnsweredAt ?? ''),
     accuracyRate: getAccuracyRate(statsMap[item.question] ?? null),
   }))
+}
 
-  const filtered = prepared.filter((row) => {
-    if (typeFilter === 'with_type' && row.normalizedType.length === 0) return false
-    if (typeFilter === 'without_type' && row.normalizedType.length > 0) return false
-    if (selectedType !== 'all' && row.normalizedType !== selectedType) return false
-    if (statsFilterMode === 'wrong_only' && (!row.statEntry || row.statEntry.wrongCount <= 0)) return false
-    if (statsFilterMode === 'unseen_only' && row.statEntry && row.statEntry.seenCount > 0) return false
-    if (statsFilterMode === 'mastered_only' && (!row.statEntry || row.statEntry.mastered !== true)) return false
+function matchesTypeScopeFilters(row: TableRow, typeFilter: TypeFilter, statsFilterMode: StatsFilterMode): boolean {
+  if (typeFilter === 'with_type' && row.normalizedType.length === 0) return false
+  if (typeFilter === 'without_type' && row.normalizedType.length > 0) return false
+  if (statsFilterMode === 'wrong_only' && (!row.statEntry || row.statEntry.wrongCount <= 0)) return false
+  if (statsFilterMode === 'unseen_only' && row.statEntry && row.statEntry.seenCount > 0) return false
+  if (statsFilterMode === 'mastered_only' && (!row.statEntry || row.statEntry.mastered !== true)) return false
+  return true
+}
 
-    if (normalizedKeyword.length === 0) return true
+function matchesSelectedType(row: TableRow, selectedType: string): boolean {
+  return selectedType === 'all' || row.normalizedType === selectedType
+}
 
-    const candidates = [row.item.question, ...row.item.options, row.normalizedType, row.updatedAt ?? '']
-    return candidates.some((candidate) => candidate.toLowerCase().includes(normalizedKeyword))
-  })
+function matchesKeyword(row: TableRow, normalizedKeyword: string): boolean {
+  if (normalizedKeyword.length === 0) return true
+  const candidates = [row.item.question, ...row.item.options, row.normalizedType, row.updatedAt ?? '']
+  return candidates.some((candidate) => candidate.toLowerCase().includes(normalizedKeyword))
+}
+
+interface BuildFilteredRowsParams {
+  sourceRows: TableRow[]
+  normalizedKeyword: string
+  shuffleTick: number
+  sortMode: SortMode
+}
+
+function buildFilteredRows(params: BuildFilteredRowsParams): TableRow[] {
+  const { normalizedKeyword, shuffleTick, sortMode, sourceRows } = params
+
+  const filtered = sourceRows.filter((row) => matchesKeyword(row, normalizedKeyword))
 
   filtered.sort((left, right) => {
     if (sortMode === 'wrong_desc' || sortMode === 'wrong_asc') {
@@ -501,32 +506,39 @@ export function QuestionBankPage() {
 
   const normalizedKeyword = keyword.trim().toLowerCase()
 
+  const preparedRows = useMemo(() => {
+    return prepareTableRows(deferredRows, statsMap)
+  }, [deferredRows, statsMap])
+
+  const typeScopedRows = useMemo(() => {
+    return preparedRows.filter((row) => matchesTypeScopeFilters(row, typeFilter, statsFilterMode))
+  }, [preparedRows, statsFilterMode, typeFilter])
+
   const availableTypes = useMemo(() => {
     const typeSet = new Set<string>()
-    for (const row of deferredRows) {
-      const normalizedType = normalizeTypeValue(row.type)
-      if (normalizedType.length > 0) typeSet.add(normalizedType)
+    for (const row of typeScopedRows) {
+      if (row.normalizedType.length > 0) typeSet.add(row.normalizedType)
     }
     return Array.from(typeSet).sort((left, right) => left.localeCompare(right, 'zh-CN'))
-  }, [deferredRows])
+  }, [typeScopedRows])
 
   useEffect(() => {
     if (selectedType === 'all') return
     if (!availableTypes.includes(selectedType)) setSelectedType('all')
   }, [availableTypes, selectedType])
 
+  const selectedTypeRows = useMemo(() => {
+    return typeScopedRows.filter((row) => matchesSelectedType(row, selectedType))
+  }, [selectedType, typeScopedRows])
+
   const filteredRows = useMemo(() => {
     return buildFilteredRows({
-      sourceRows: deferredRows,
+      sourceRows: selectedTypeRows,
       normalizedKeyword,
-      selectedType,
       shuffleTick,
       sortMode,
-      statsFilterMode,
-      statsMap,
-      typeFilter,
     })
-  }, [deferredRows, normalizedKeyword, selectedType, shuffleTick, sortMode, statsFilterMode, statsMap, typeFilter])
+  }, [normalizedKeyword, selectedTypeRows, shuffleTick, sortMode])
 
   useEffect(() => {
     const node = scrollContainerRef.current
