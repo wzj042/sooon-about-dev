@@ -31,6 +31,24 @@ const MAX_VIRTUAL_RENDER_ROWS = 28
 const MIN_TABLE_WIDTH_PX = 1200
 const INITIAL_CACHE_PREVIEW_ROWS = 240
 const OPTIONS_REVEAL_SESSION_KEY = 'question-bank-options-reveal-map'
+const FILTER_STATE_STORAGE_KEY = 'question-bank-filter-state'
+const SUWEN_TYPE = '素问'
+const COMMON_SENSE_TYPE_VALUE = '__common_sense_non_suwen__'
+const COMMON_SENSE_TYPE_LABEL = '🌌常识'
+const TYPE_FILTERS: TypeFilter[] = ['all', 'with_type', 'without_type']
+const STATS_FILTERS: StatsFilterMode[] = ['all', 'wrong_only', 'unseen_only', 'mastered_only']
+const SORT_MODES: SortMode[] = [
+  'updated_desc',
+  'updated_asc',
+  'wrong_desc',
+  'wrong_asc',
+  'answered_at_desc',
+  'answered_at_asc',
+  'response_ms_desc',
+  'response_ms_asc',
+  'accuracy_desc',
+  'accuracy_asc',
+]
 
 type TypeFilter = 'all' | 'with_type' | 'without_type'
 type StatsFilterMode = 'all' | 'wrong_only' | 'unseen_only' | 'mastered_only'
@@ -45,6 +63,15 @@ type SortMode =
   | 'response_ms_asc'
   | 'accuracy_desc'
   | 'accuracy_asc'
+
+type SearchScope = 'question' | 'options' | 'type'
+
+const SEARCH_SCOPES: SearchScope[] = ['question', 'options', 'type']
+const DEFAULT_SEARCH_SCOPES: Record<SearchScope, boolean> = {
+  question: true,
+  options: true,
+  type: true,
+}
 
 interface TableRow {
   item: QuestionItem
@@ -244,6 +271,60 @@ function buildOptionRevealKey(row: TableRow): string {
   return `${row.originalIndex}:${row.item.question}`
 }
 
+function loadFilterStateFromStorage(): {
+  keyword?: string
+  typeFilter?: TypeFilter
+  statsFilterMode?: StatsFilterMode
+  selectedType?: string
+  sortMode?: SortMode
+  selectedDate?: string
+  searchScopes?: Record<SearchScope, boolean>
+} {
+  if (typeof window === 'undefined') return {}
+
+  try {
+    const raw = window.localStorage.getItem(FILTER_STATE_STORAGE_KEY)
+    if (!raw) return {}
+    const parsed = JSON.parse(raw) as Record<string, unknown>
+    if (!parsed || typeof parsed !== 'object') return {}
+
+    const next: {
+      keyword?: string
+      typeFilter?: TypeFilter
+      statsFilterMode?: StatsFilterMode
+      selectedType?: string
+      sortMode?: SortMode
+      selectedDate?: string
+      searchScopes?: Record<SearchScope, boolean>
+    } = {}
+
+    if (typeof parsed.keyword === 'string') next.keyword = parsed.keyword
+    if (typeof parsed.selectedType === 'string') next.selectedType = parsed.selectedType
+    if (typeof parsed.selectedDate === 'string') next.selectedDate = parsed.selectedDate
+    if (typeof parsed.typeFilter === 'string' && TYPE_FILTERS.includes(parsed.typeFilter as TypeFilter)) {
+      next.typeFilter = parsed.typeFilter as TypeFilter
+    }
+    if (typeof parsed.statsFilterMode === 'string' && STATS_FILTERS.includes(parsed.statsFilterMode as StatsFilterMode)) {
+      next.statsFilterMode = parsed.statsFilterMode as StatsFilterMode
+    }
+    if (typeof parsed.sortMode === 'string' && SORT_MODES.includes(parsed.sortMode as SortMode)) {
+      next.sortMode = parsed.sortMode as SortMode
+    }
+    if (parsed.searchScopes && typeof parsed.searchScopes === 'object') {
+      const nextScopes: Record<SearchScope, boolean> = { ...DEFAULT_SEARCH_SCOPES }
+      for (const scope of SEARCH_SCOPES) {
+        if (typeof (parsed.searchScopes as Record<string, unknown>)[scope] === 'boolean') {
+          nextScopes[scope] = (parsed.searchScopes as Record<string, unknown>)[scope] as boolean
+        }
+      }
+      next.searchScopes = nextScopes
+    }
+    return next
+  } catch {
+    return {}
+  }
+}
+
 function getColumnCssVarName(key: ColumnKey): string {
   return `--qb-col-${key}-w`
 }
@@ -283,26 +364,60 @@ function matchesTypeScopeFilters(row: TableRow, typeFilter: TypeFilter, statsFil
 }
 
 function matchesSelectedType(row: TableRow, selectedType: string): boolean {
-  return selectedType === 'all' || row.normalizedType === selectedType
+  if (selectedType === 'all') return true
+  if (selectedType === COMMON_SENSE_TYPE_VALUE) return row.normalizedType !== SUWEN_TYPE
+  return row.normalizedType === selectedType
 }
 
-function matchesKeyword(row: TableRow, normalizedKeyword: string): boolean {
+function resolveActiveSearchScopes(scopes: Record<SearchScope, boolean>): Record<SearchScope, boolean> {
+  const hasActiveScope = SEARCH_SCOPES.some((scope) => scopes[scope])
+  return hasActiveScope ? scopes : DEFAULT_SEARCH_SCOPES
+}
+
+function matchesKeyword(row: TableRow, normalizedKeyword: string, scopes: Record<SearchScope, boolean>): boolean {
   if (normalizedKeyword.length === 0) return true
-  const candidates = [row.item.question, ...row.item.options, row.normalizedType, row.updatedAt ?? '']
+  const activeScopes = resolveActiveSearchScopes(scopes)
+  const candidates: string[] = []
+
+  if (activeScopes.question) candidates.push(row.item.question)
+  if (activeScopes.options) candidates.push(...row.item.options)
+  if (activeScopes.type) candidates.push(row.normalizedType)
+
   return candidates.some((candidate) => candidate.toLowerCase().includes(normalizedKeyword))
+}
+
+function formatTypeLabel(type: string): string {
+  return type === SUWEN_TYPE ? `✨${type}` : type
+}
+
+function formatDateKeyFromTimestamp(timestamp: number | null): string | null {
+  if (timestamp === null) return null
+  const parsed = new Date(timestamp)
+  if (Number.isNaN(parsed.getTime())) return null
+  const year = parsed.getFullYear()
+  const month = `${parsed.getMonth() + 1}`.padStart(2, '0')
+  const day = `${parsed.getDate()}`.padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function matchesSelectedDate(row: TableRow, selectedDate: string): boolean {
+  if (!selectedDate) return true
+  return formatDateKeyFromTimestamp(row.updatedTimestamp) === selectedDate
 }
 
 interface BuildFilteredRowsParams {
   sourceRows: TableRow[]
   normalizedKeyword: string
+  searchScopes: Record<SearchScope, boolean>
+  selectedDate: string
   shuffleTick: number
   sortMode: SortMode
 }
 
 function buildFilteredRows(params: BuildFilteredRowsParams): TableRow[] {
-  const { normalizedKeyword, shuffleTick, sortMode, sourceRows } = params
+  const { normalizedKeyword, shuffleTick, sortMode, sourceRows, searchScopes, selectedDate } = params
 
-  const filtered = sourceRows.filter((row) => matchesKeyword(row, normalizedKeyword))
+  const filtered = sourceRows.filter((row) => matchesKeyword(row, normalizedKeyword, searchScopes) && matchesSelectedDate(row, selectedDate))
 
   filtered.sort((left, right) => {
     if (sortMode === 'wrong_desc' || sortMode === 'wrong_asc') {
@@ -379,16 +494,22 @@ async function readCurrentLocalQuestionRows(): Promise<QuestionItem[]> {
 
 export function QuestionBankPage() {
   const navigate = useNavigate()
+  const initialFilterState = loadFilterStateFromStorage()
   const [rows, setRows] = useState<QuestionItem[]>([])
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const [keyword, setKeyword] = useState('')
-  const [typeFilter, setTypeFilter] = useState<TypeFilter>('all')
-  const [statsFilterMode, setStatsFilterMode] = useState<StatsFilterMode>('all')
-  const [selectedType, setSelectedType] = useState('all')
-  const [sortMode, setSortMode] = useState<SortMode>('updated_desc')
+  const [keyword, setKeyword] = useState(initialFilterState.keyword ?? '')
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>(initialFilterState.typeFilter ?? 'all')
+  const [statsFilterMode, setStatsFilterMode] = useState<StatsFilterMode>(initialFilterState.statsFilterMode ?? 'all')
+  const [selectedType, setSelectedType] = useState(initialFilterState.selectedType ?? 'all')
+  const [sortMode, setSortMode] = useState<SortMode>(initialFilterState.sortMode ?? 'updated_desc')
+  const [selectedDate, setSelectedDate] = useState(initialFilterState.selectedDate ?? '')
+  const [searchScopes, setSearchScopes] = useState<Record<SearchScope, boolean>>(
+    initialFilterState.searchScopes ?? DEFAULT_SEARCH_SCOPES,
+  )
+  const [filtersCollapsed, setFiltersCollapsed] = useState(false)
   const [shuffleTick, setShuffleTick] = useState(0)
   const [statsMap, setStatsMap] = useState<QuestionStatsMap>({})
   const [optionsRevealMap, setOptionsRevealMap] = useState<Record<string, boolean>>(() => loadOptionsRevealStateFromSession())
@@ -504,6 +625,25 @@ export function QuestionBankPage() {
     }
   }, [optionsRevealMap])
 
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        FILTER_STATE_STORAGE_KEY,
+        JSON.stringify({
+          keyword,
+          typeFilter,
+          statsFilterMode,
+          selectedType,
+          sortMode,
+          selectedDate,
+          searchScopes,
+        }),
+      )
+    } catch {
+      // Ignore storage errors to avoid blocking table interactions.
+    }
+  }, [keyword, typeFilter, statsFilterMode, selectedType, sortMode, selectedDate, searchScopes])
+
   const normalizedKeyword = keyword.trim().toLowerCase()
 
   const preparedRows = useMemo(() => {
@@ -514,18 +654,72 @@ export function QuestionBankPage() {
     return preparedRows.filter((row) => matchesTypeScopeFilters(row, typeFilter, statsFilterMode))
   }, [preparedRows, statsFilterMode, typeFilter])
 
-  const availableTypes = useMemo(() => {
-    const typeSet = new Set<string>()
-    for (const row of typeScopedRows) {
-      if (row.normalizedType.length > 0) typeSet.add(row.normalizedType)
+  const typeCountSourceRows = useMemo(() => {
+    if (normalizedKeyword.length === 0 && !selectedDate) return typeScopedRows
+    return typeScopedRows.filter((row) => matchesKeyword(row, normalizedKeyword, searchScopes) && matchesSelectedDate(row, selectedDate))
+  }, [normalizedKeyword, searchScopes, selectedDate, typeScopedRows])
+
+  const dateOptionSourceRows = useMemo(() => {
+    if (normalizedKeyword.length === 0) return typeScopedRows
+    return typeScopedRows.filter((row) => matchesKeyword(row, normalizedKeyword, searchScopes))
+  }, [normalizedKeyword, searchScopes, typeScopedRows])
+
+  const availableDates = useMemo(() => {
+    const dateSet = new Set<string>()
+    for (const row of dateOptionSourceRows) {
+      const key = formatDateKeyFromTimestamp(row.updatedTimestamp)
+      if (key) dateSet.add(key)
     }
-    return Array.from(typeSet).sort((left, right) => left.localeCompare(right, 'zh-CN'))
-  }, [typeScopedRows])
+    return Array.from(dateSet).sort((left, right) => right.localeCompare(left))
+  }, [dateOptionSourceRows])
+
+  const availableDateSet = useMemo(() => new Set(availableDates), [availableDates])
+
+  const dateRange = useMemo(() => {
+    if (availableDates.length === 0) return null
+    return {
+      max: availableDates[0],
+      min: availableDates[availableDates.length - 1],
+    }
+  }, [availableDates])
+
+  const typeCounts = useMemo(() => {
+    const map = new Map<string, number>()
+    let nonSuwenCount = 0
+
+    for (const row of typeCountSourceRows) {
+      if (row.normalizedType.length > 0) {
+        map.set(row.normalizedType, (map.get(row.normalizedType) ?? 0) + 1)
+      }
+      if (row.normalizedType !== SUWEN_TYPE) {
+        nonSuwenCount += 1
+      }
+    }
+
+    return {
+      map,
+      nonSuwenCount,
+      total: typeCountSourceRows.length,
+    }
+  }, [typeCountSourceRows])
+
+  const availableTypes = useMemo(() => {
+    return Array.from(typeCounts.map.keys()).sort((left, right) => left.localeCompare(right, 'zh-CN'))
+  }, [typeCounts])
 
   useEffect(() => {
     if (selectedType === 'all') return
+    if (selectedType === COMMON_SENSE_TYPE_VALUE) {
+      if (typeCounts.nonSuwenCount === 0) setSelectedType('all')
+      return
+    }
     if (!availableTypes.includes(selectedType)) setSelectedType('all')
-  }, [availableTypes, selectedType])
+  }, [availableTypes, selectedType, typeCounts.nonSuwenCount])
+
+  useEffect(() => {
+    if (!selectedDate) return
+    if (!availableDateSet.has(selectedDate)) setSelectedDate('')
+  }, [availableDateSet, selectedDate])
 
   const selectedTypeRows = useMemo(() => {
     return typeScopedRows.filter((row) => matchesSelectedType(row, selectedType))
@@ -535,10 +729,12 @@ export function QuestionBankPage() {
     return buildFilteredRows({
       sourceRows: selectedTypeRows,
       normalizedKeyword,
+      searchScopes,
+      selectedDate,
       shuffleTick,
       sortMode,
     })
-  }, [normalizedKeyword, selectedTypeRows, shuffleTick, sortMode])
+  }, [normalizedKeyword, searchScopes, selectedDate, selectedTypeRows, shuffleTick, sortMode])
 
   useEffect(() => {
     const node = scrollContainerRef.current
@@ -546,7 +742,7 @@ export function QuestionBankPage() {
       node.scrollTop = 0
     }
     setScrollTop(0)
-  }, [normalizedKeyword, selectedType, shuffleTick, sortMode, statsFilterMode, typeFilter])
+  }, [normalizedKeyword, searchScopes, selectedDate, selectedType, shuffleTick, sortMode, statsFilterMode, typeFilter])
 
   useEffect(() => {
     const node = scrollContainerRef.current
@@ -729,6 +925,27 @@ export function QuestionBankPage() {
 
     return style
   }, [columnWidths, tableMinWidthPx])
+
+  const toggleSearchScope = (scope: SearchScope) => {
+    setSearchScopes((previous) => {
+      const activeCount = SEARCH_SCOPES.filter((key) => previous[key]).length
+      if (previous[scope] && activeCount <= 1) return previous
+      return {
+        ...previous,
+        [scope]: !previous[scope],
+      }
+    })
+  }
+
+  const handleDateChange = (value: string) => {
+    if (!value) {
+      setSelectedDate('')
+      return
+    }
+    if (availableDateSet.has(value)) {
+      setSelectedDate(value)
+    }
+  }
 
   const toggleColumnVisibility = (key: ColumnKey) => {
     setVisibleColumns((previous) => {
@@ -928,7 +1145,7 @@ export function QuestionBankPage() {
 
   return (
     <main className="h-screen h-[100svh] h-[100dvh] overflow-x-hidden overflow-y-auto bg-[linear-gradient(180deg,#eaf4ff_0%,#f6faff_48%,#eef6ff_100%)] px-3 py-3 text-slate-900 sm:overflow-hidden sm:px-4 sm:py-8">
-      <div className="mx-auto flex min-h-full w-full max-w-[1320px] flex-col sm:h-full">
+      <div className="mx-auto flex h-full min-h-full w-full max-w-[1320px] flex-col">
         <section className="rounded-2xl border border-[#2196f3]/15 bg-white/95 p-4 shadow-[0_12px_28px_rgba(33,150,243,0.12)] sm:p-8">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
@@ -936,6 +1153,15 @@ export function QuestionBankPage() {
             </div>
 
             <div className="flex flex-wrap gap-2">
+              <button
+                aria-controls="question-bank-filters"
+                aria-expanded={!filtersCollapsed}
+                className="inline-flex items-center rounded-md border border-[#2196f3]/35 bg-white px-4 py-2 text-sm font-semibold text-[#1b5fa6] transition hover:border-[#2196f3] hover:bg-[#2196f3]/5 hover:text-[#0f4f90]"
+                type="button"
+                onClick={() => setFiltersCollapsed((value) => !value)}
+              >
+                {filtersCollapsed ? '展开筛选' : '折叠筛选'}
+              </button>
               <Link
                 className="inline-flex items-center rounded-md border border-[#2196f3]/35 bg-white px-4 py-2 text-sm font-semibold text-[#1b5fa6] transition hover:border-[#2196f3] hover:bg-[#2196f3]/5 hover:text-[#0f4f90]"
                 to={APP_ROUTES.home}
@@ -951,16 +1177,49 @@ export function QuestionBankPage() {
             </div>
           </div>
 
-          <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+          <div
+            className={filtersCollapsed ? 'mt-4 hidden' : 'mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-6'}
+            id="question-bank-filters"
+          >
             <label className="flex flex-col gap-1 text-sm text-slate-700 xl:col-span-2">
               关键词搜索
               <input
                 className="rounded-md border border-[#2196f3]/25 bg-white px-3 py-2 text-sm outline-none transition placeholder:text-slate-400 focus:border-[#2196f3] focus:ring-2 focus:ring-[#2196f3]/20"
-                placeholder="按题目、选项、类型、更新时间搜索"
+                placeholder="按题目、选项、类型搜索"
                 type="text"
                 value={keyword}
                 onChange={(event) => setKeyword(event.target.value)}
               />
+              <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-600">
+                <span className="font-semibold text-slate-500">搜索范围</span>
+                <label className="inline-flex items-center gap-1">
+                  <input
+                    checked={searchScopes.question}
+                    className="h-3.5 w-3.5 accent-[#2196f3]"
+                    type="checkbox"
+                    onChange={() => toggleSearchScope('question')}
+                  />
+                  题目
+                </label>
+                <label className="inline-flex items-center gap-1">
+                  <input
+                    checked={searchScopes.options}
+                    className="h-3.5 w-3.5 accent-[#2196f3]"
+                    type="checkbox"
+                    onChange={() => toggleSearchScope('options')}
+                  />
+                  选项
+                </label>
+                <label className="inline-flex items-center gap-1">
+                  <input
+                    checked={searchScopes.type}
+                    className="h-3.5 w-3.5 accent-[#2196f3]"
+                    type="checkbox"
+                    onChange={() => toggleSearchScope('type')}
+                  />
+                  类型
+                </label>
+              </div>
             </label>
 
             <label className="flex flex-col gap-1 text-sm text-slate-700">
@@ -977,17 +1236,25 @@ export function QuestionBankPage() {
             </label>
 
             <label className="flex flex-col gap-1 text-sm text-slate-700">
-              类型值
+              <span>
+                类型值
+                <span className="ml-1 align-super text-[10px] font-semibold text-slate-500">
+                  ✨=素问，{COMMON_SENSE_TYPE_LABEL}=非素问合集
+                </span>
+              </span>
               <select
                 className="rounded-md border border-[#2196f3]/25 bg-white px-3 py-2 text-sm outline-none transition focus:border-[#2196f3] focus:ring-2 focus:ring-[#2196f3]/20 disabled:cursor-not-allowed disabled:bg-[#2196f3]/10"
                 disabled={typeFilter === 'without_type'}
                 value={selectedType}
                 onChange={(event) => setSelectedType(event.target.value)}
               >
-                <option value="all">全部类型</option>
+                <option value="all">全部类型 ({typeCounts.total})</option>
+                <option value={COMMON_SENSE_TYPE_VALUE}>
+                  {COMMON_SENSE_TYPE_LABEL} ({typeCounts.nonSuwenCount})
+                </option>
                 {availableTypes.map((type) => (
                   <option key={type} value={type}>
-                    {type}
+                    {formatTypeLabel(type)} ({typeCounts.map.get(type) ?? 0})
                   </option>
                 ))}
               </select>
@@ -1011,6 +1278,36 @@ export function QuestionBankPage() {
                 <option value="accuracy_desc">正确率: 高到低</option>
                 <option value="accuracy_asc">正确率: 低到高</option>
               </select>
+            </label>
+
+            <label className="flex flex-col gap-1 text-sm text-slate-700">
+              更新时间
+              <div className="flex items-center gap-2">
+                <input
+                  className="w-full rounded-md border border-[#2196f3]/25 bg-white px-3 py-2 text-sm outline-none transition focus:border-[#2196f3] focus:ring-2 focus:ring-[#2196f3]/20 disabled:cursor-not-allowed disabled:bg-[#2196f3]/10"
+                  disabled={availableDates.length === 0}
+                  list="qb-date-options"
+                  max={dateRange?.max}
+                  min={dateRange?.min}
+                  type="date"
+                  value={selectedDate}
+                  onChange={(event) => handleDateChange(event.target.value)}
+                />
+                <datalist id="qb-date-options">
+                  {availableDates.map((date) => (
+                    <option key={date} value={date} />
+                  ))}
+                </datalist>
+                {selectedDate ? (
+                  <button
+                    className="whitespace-nowrap rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-600 transition hover:border-slate-400 hover:bg-slate-100"
+                    type="button"
+                    onClick={() => setSelectedDate('')}
+                  >
+                    清空
+                  </button>
+                ) : null}
+              </div>
             </label>
 
             <label className="flex flex-col gap-1 text-sm text-slate-700">
@@ -1074,7 +1371,7 @@ export function QuestionBankPage() {
           {error ? <p className="mt-3 rounded-md bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p> : null}
         </section>
 
-        <section className="relative mt-3 flex min-h-[360px] flex-1 overflow-hidden rounded-2xl border border-[#2196f3]/20 bg-white/95 shadow-[0_14px_32px_rgba(33,150,243,0.14)] sm:mt-4 sm:min-h-0">
+        <section className="relative mt-3 flex min-h-0 flex-1 overflow-hidden rounded-2xl border border-[#2196f3]/20 bg-white/95 shadow-[0_14px_32px_rgba(33,150,243,0.14)] sm:mt-4 sm:min-h-0">
           <div className="h-full w-full overflow-auto pr-1" ref={scrollContainerRef}>
             <table className="table-fixed text-left text-sm" ref={tableRef} style={tableStyle}>
               <thead className="sticky top-0 z-10 bg-[#e8f3ff] text-xs uppercase tracking-wide text-[#1b5fa6]">

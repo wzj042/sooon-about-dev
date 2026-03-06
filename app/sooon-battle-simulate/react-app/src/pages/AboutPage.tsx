@@ -74,15 +74,12 @@ export function AboutPage() {
           <h2 className="mb-2 text-lg font-semibold">题库内容来源与声明</h2>
           <p className="mb-2">本站使用的题库内容由两部分组成，其版权归属各不相同：</p>
           <blockquote className="mb-2 border-l-4 border-slate-300 pl-4 text-slate-600">
-            题目中通过 type 字段区分，type 为 sooon_ai 的题目为素问题目，type 为 common_sense 的题目为常识题目。
+            题目中通过 type 字段区分，type 为 “素问” 的题目为素问题目，其余的题目为常识题目。
           </blockquote>
           <blockquote className="mb-3 border-l-4 border-slate-300 pl-4 text-slate-600">
             当前（2025-09-26）存量爬取的 1485 题为 AI 预筛后手动分类，可能存在误判错漏，欢迎通过 Github issue 反馈。
           </blockquote>
           <hr className="my-4 border-slate-200" />
-          <blockquote id="update-info" className="mb-4 border-l-4 border-slate-300 pl-4 text-slate-600">
-            题库最近更新于 未知，共 {summary.total ?? '-'} 题。
-          </blockquote>
 
           <h2 className="mb-2 text-lg font-semibold">"素问题目"部分</h2>
           <p className="mb-4">
