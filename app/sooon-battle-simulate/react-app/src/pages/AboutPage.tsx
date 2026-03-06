@@ -9,46 +9,46 @@ interface ManifestSummary {
   contentHash: string | null
 }
 
-const DEFAULT_SUMMARY: ManifestSummary = {
-  total: null,
-  version: null,
-  contentHash: null,
-}
+// const DEFAULT_SUMMARY: ManifestSummary = {
+//   total: null,
+//   version: null,
+//   contentHash: null,
+// }
 
 export function AboutPage() {
-  const [summary, setSummary] = useState<ManifestSummary>(DEFAULT_SUMMARY)
+  // const [summary, setSummary] = useState<ManifestSummary>(DEFAULT_SUMMARY)
 
-  useEffect(() => {
-    let cancelled = false
+  // useEffect(() => {
+  //   let cancelled = false
 
-    const loadManifest = async () => {
-      try {
-        const response = await fetch(toPublicUrl('assets/qb.manifest.json'), { cache: 'no-store' })
-        if (!response.ok) return
+  //   const loadManifest = async () => {
+  //     try {
+  //       const response = await fetch(toPublicUrl('assets/qb.manifest.json'), { cache: 'no-store' })
+  //       if (!response.ok) return
 
-        const payload = (await response.json()) as {
-          total?: unknown
-          version?: unknown
-          contentHash?: unknown
-        }
+  //       const payload = (await response.json()) as {
+  //         total?: unknown
+  //         version?: unknown
+  //         contentHash?: unknown
+  //       }
 
-        if (cancelled) return
+  //       if (cancelled) return
 
-        setSummary({
-          total: typeof payload.total === 'number' && Number.isFinite(payload.total) ? Math.floor(payload.total) : null,
-          version: typeof payload.version === 'number' && Number.isFinite(payload.version) ? Math.floor(payload.version) : null,
-          contentHash: typeof payload.contentHash === 'string' && payload.contentHash.length > 0 ? payload.contentHash : null,
-        })
-      } catch {
-        // ignore
-      }
-    }
+  //       setSummary({
+  //         total: typeof payload.total === 'number' && Number.isFinite(payload.total) ? Math.floor(payload.total) : null,
+  //         version: typeof payload.version === 'number' && Number.isFinite(payload.version) ? Math.floor(payload.version) : null,
+  //         contentHash: typeof payload.contentHash === 'string' && payload.contentHash.length > 0 ? payload.contentHash : null,
+  //       })
+  //     } catch {
+  //       // ignore
+  //     }
+  //   }
 
-    void loadManifest()
-    return () => {
-      cancelled = true
-    }
-  }, [])
+  //   void loadManifest()
+  //   return () => {
+  //     cancelled = true
+  //   }
+  // }, [])
 
   return (
     <main className="min-h-screen bg-slate-100 px-4 py-8 text-slate-800">
