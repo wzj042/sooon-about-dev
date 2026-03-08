@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { APP_ROUTES } from '../app/paths'
 import { loadLastPracticeQueueSession, subscribePracticeQueueSession } from '../services/practiceQueue'
 import {
+  clearQuestionHistory,
   getQuestionStatsSummary,
   loadDailyQuestionStatsMap,
   loadQuestionStatsMap,
@@ -10,6 +11,7 @@ import {
   type DailyQuestionStatsMap,
   type QuestionStatsSummary,
 } from '../services/questionStats'
+import { exportUserData, importUserData } from '../services/userDataTransfer'
 import { toPublicUrl } from '../utils/publicAsset'
 
 const homeCopy = {
@@ -100,6 +102,9 @@ export function HomePage() {
   const [totalQuestions, setTotalQuestions] = useState<number | null>(null)
   const [lastQueueInfo, setLastQueueInfo] = useState<{ count: number; cursor: number; practicedCount: number } | null>(null)
   const [dailyStats, setDailyStats] = useState<DailyQuestionStatsMap>({})
+  const [userDataTransferBusy, setUserDataTransferBusy] = useState(false)
+  const [userDataTransferMessage, setUserDataTransferMessage] = useState<string | null>(null)
+  const importInputRef = useRef<HTMLInputElement | null>(null)
 
   useEffect(() => {
     const refreshQueueInfo = () => {
@@ -149,6 +154,38 @@ export function HomePage() {
   const queueTotal = lastQueueInfo?.count ?? 0
   const queuePracticed = Math.min(queueTotal, Math.max(0, lastQueueInfo?.practicedCount ?? 0))
   const queueNextIndex = lastQueueInfo && lastQueueInfo.count > 0 ? (lastQueueInfo.cursor % lastQueueInfo.count) + 1 : 0
+
+  const handleExportUserData = () => {
+    const result = exportUserData()
+    setUserDataTransferMessage(result.message)
+  }
+
+  const handleClearQuestionHistory = () => {
+    const firstConfirmed = window.confirm('将删除当前浏览器中的历史答题记录，是否继续？')
+    if (!firstConfirmed) return
+
+    const secondConfirmed = window.confirm('删除后无法恢复。确认删除历史答题记录吗？')
+    if (!secondConfirmed) return
+
+    clearQuestionHistory()
+    setUserDataTransferMessage('历史答题记录已删除')
+  }
+
+  const handleImportUserData = async (file: File) => {
+    const confirmed = window.confirm('导入将覆盖当前本地用户数据，是否继续？')
+    if (!confirmed) return
+
+    setUserDataTransferBusy(true)
+    const result = await importUserData(file)
+    setUserDataTransferBusy(false)
+    setUserDataTransferMessage(result.message)
+
+    if (result.ok) {
+      window.setTimeout(() => {
+        window.location.reload()
+      }, 400)
+    }
+  }
 
   const heatmap = useMemo(() => {
     const endDate = withZeroTime(new Date())
@@ -329,6 +366,58 @@ export function HomePage() {
               平均答题速度: {formatSeconds(summary.averageResponseMs)} | 正确率: {(accuracy * 100).toFixed(1)}%
             </div>
           </div>
+        </section>
+
+        <section className="w-full rounded-2xl border border-slate-700/70 bg-slate-900/55 p-6 shadow-lg sm:p-8">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-xl font-semibold text-slate-100">用户数据与记录</h2>
+            <span className="text-sm text-slate-400">备份 / 导入 / 清空</span>
+          </div>
+
+          <div className="mt-4 flex flex-wrap gap-3">
+            <button
+              className="inline-flex items-center rounded-md border border-cyan-400/70 bg-cyan-400/10 px-5 py-2 text-sm font-semibold text-cyan-100 transition hover:border-cyan-300 hover:text-cyan-50 disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={userDataTransferBusy}
+              type="button"
+              onClick={handleExportUserData}
+            >
+              导出用户数据
+            </button>
+            <button
+              className="inline-flex items-center rounded-md border border-emerald-400/70 bg-emerald-400/10 px-5 py-2 text-sm font-semibold text-emerald-100 transition hover:border-emerald-300 hover:text-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={userDataTransferBusy}
+              type="button"
+              onClick={() => {
+                importInputRef.current?.click()
+              }}
+            >
+              导入用户数据
+            </button>
+            <button
+              className="inline-flex items-center rounded-md border border-amber-400/70 bg-amber-400/10 px-5 py-2 text-sm font-semibold text-amber-100 transition hover:border-amber-300 hover:text-amber-50 disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={userDataTransferBusy}
+              type="button"
+              onClick={handleClearQuestionHistory}
+            >
+              删除历史答题记录
+            </button>
+            <input
+              accept="application/json,.json"
+              ref={importInputRef}
+              style={{ display: 'none' }}
+              type="file"
+              onChange={(event) => {
+                const file = event.target.files?.[0]
+                if (!file) return
+                void handleImportUserData(file)
+                event.target.value = ''
+              }}
+            />
+          </div>
+
+          <div className="mt-3 text-sm text-slate-400">手动备份或恢复当前浏览器中的本地用户数据。</div>
+          <div className="mt-1 text-sm text-amber-200/80">清空历史答题记录会重置答题统计、热力图与题目作答记录。</div>
+          {userDataTransferMessage ? <div className="mt-2 text-sm text-emerald-200">{userDataTransferMessage}</div> : null}
         </section>
       </div>
     </main>
