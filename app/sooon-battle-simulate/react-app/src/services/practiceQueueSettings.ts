@@ -1,11 +1,4 @@
-import {
-  DEFAULT_OPTION_WRAP_CHARS,
-  DEFAULT_TITLE_SPACING_PX,
-  DEFAULT_TITLE_WRAP_CHARS,
-  normalizeOptionWrapChars,
-  normalizeTitleSpacingPx,
-  normalizeTitleWrapChars,
-} from '../domain/validation'
+import { normalizeOptionWrapChars, normalizeTitleSpacingPx, normalizeTitleWrapChars } from '../domain/validation'
 import { getJson, setValue } from './storage'
 
 const PRACTICE_QUEUE_SETTINGS_KEY = 'sooon-practice-queue-settings'
