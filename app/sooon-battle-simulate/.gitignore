@@ -1,2 +1,5 @@
 .history
 .mi.json
+# Build outputs
+dist/
+
