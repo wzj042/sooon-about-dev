@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useRef, useState } from 'react'
+﻿import { useEffect, useMemo, useState } from 'react'
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
 
 import type { QuestionSelectionStrategy } from '../../domain/types'
@@ -15,6 +15,7 @@ import {
   sanitizeDigitsInput,
   toAccuracyRatio,
 } from '../../domain/validation'
+import { DisplaySettingsFields } from './DisplaySettingsFields'
 import { Modal } from '../shared/Modal'
 
 interface SettingsModalProps {
@@ -31,6 +32,7 @@ interface SettingsModalProps {
     titleSpacingPx: number
     titleWrapChars: number
     questionSelectionStrategy: QuestionSelectionStrategy
+    autoMasterTimeLeft: number
   }
   playerAvatarHtml: string
   opponentAvatarHtml: string
@@ -49,12 +51,8 @@ interface SettingsModalProps {
     titleSpacingPx: number
     titleWrapChars: number
     questionSelectionStrategy: QuestionSelectionStrategy
+    autoMasterTimeLeft: number
   }) => void
-  onExportUserData: () => void
-  onImportUserData: (file: File) => void
-  onClearQuestionHistory: () => void
-  userDataTransferBusy: boolean
-  userDataTransferMessage: string | null
   disableQuestionSelectionStrategy?: boolean
   onClose: () => void
 }
@@ -71,6 +69,7 @@ interface DraftState {
   titleSpacingPx: string
   titleWrapChars: string
   questionSelectionStrategy: QuestionSelectionStrategy
+  autoMasterTimeLeft: string
 }
 
 function renderAvatar(html: string, fallbackSrc = DEFAULT_AVATAR_SRC) {
@@ -107,11 +106,6 @@ export function SettingsModal({
   opponentAvatarHtml,
   onOpenAvatarModal,
   onApply,
-  onExportUserData,
-  onImportUserData,
-  onClearQuestionHistory,
-  userDataTransferBusy,
-  userDataTransferMessage,
   disableQuestionSelectionStrategy = false,
   onClose,
 }: SettingsModalProps) {
@@ -127,6 +121,7 @@ export function SettingsModal({
     titleSpacingPx,
     titleWrapChars,
     questionSelectionStrategy,
+    autoMasterTimeLeft,
   } = values
 
   const [draft, setDraft] = useState<DraftState>({
@@ -141,8 +136,8 @@ export function SettingsModal({
     titleSpacingPx: String(DEFAULT_TITLE_SPACING_PX),
     titleWrapChars: String(DEFAULT_TITLE_WRAP_CHARS),
     questionSelectionStrategy: 'shuffled_traversal_recent_first',
+    autoMasterTimeLeft: '0',
   })
-  const importInputRef = useRef<HTMLInputElement | null>(null)
 
   useEffect(() => {
     if (!open) return
@@ -158,6 +153,7 @@ export function SettingsModal({
       titleSpacingPx: String(titleSpacingPx),
       titleWrapChars: String(titleWrapChars),
       questionSelectionStrategy,
+      autoMasterTimeLeft: String(autoMasterTimeLeft),
     })
   }, [
     accuracyPercent,
@@ -172,6 +168,7 @@ export function SettingsModal({
     questionSelectionStrategy,
     titleSpacingPx,
     titleWrapChars,
+    autoMasterTimeLeft,
   ])
 
   useEffect(() => {
@@ -194,8 +191,10 @@ export function SettingsModal({
     const nextOptionWrapChars = Number.parseInt(draft.optionWrapChars, 10)
     const nextTitleSpacingPx = Number.parseInt(draft.titleSpacingPx, 10)
     const nextTitleWrapChars = Number.parseInt(draft.titleWrapChars, 10)
+    const nextAutoMasterTimeLeft = Number.parseInt(draft.autoMasterTimeLeft, 10)
+    const normalizedAutoMasterTimeLeft = Number.isFinite(nextAutoMasterTimeLeft) ? Math.max(0, nextAutoMasterTimeLeft) : 0
 
-    return normalizeSettings({
+    const normalizedSettings = normalizeSettings({
       accuracyPercent: nextAccuracyPercent,
       minSpeedMs: nextMinSpeedMs,
       maxSpeedMs: nextMaxSpeedMs,
@@ -203,7 +202,19 @@ export function SettingsModal({
       titleSpacingPx: nextTitleSpacingPx,
       titleWrapChars: nextTitleWrapChars,
     })
-  }, [draft.accuracy, draft.max, draft.min, draft.optionWrapChars, draft.titleSpacingPx, draft.titleWrapChars])
+    return {
+      ...normalizedSettings,
+      autoMasterTimeLeft: normalizedAutoMasterTimeLeft,
+    }
+  }, [
+    draft.accuracy,
+    draft.autoMasterTimeLeft,
+    draft.max,
+    draft.min,
+    draft.optionWrapChars,
+    draft.titleSpacingPx,
+    draft.titleWrapChars,
+  ])
 
   const commit = (shouldClose = false) => {
     const normalizedPlayerId = normalizeDisplayId(draft.playerId, DEFAULT_PLAYER_ID)
@@ -221,6 +232,7 @@ export function SettingsModal({
       titleSpacingPx: normalized.titleSpacingPx,
       titleWrapChars: normalized.titleWrapChars,
       questionSelectionStrategy: draft.questionSelectionStrategy,
+      autoMasterTimeLeft: normalized.autoMasterTimeLeft,
     })
 
     setDraft((prev) => ({
@@ -234,6 +246,7 @@ export function SettingsModal({
       titleSpacingPx: String(normalized.titleSpacingPx),
       titleWrapChars: String(normalized.titleWrapChars),
       questionSelectionStrategy: prev.questionSelectionStrategy,
+      autoMasterTimeLeft: String(normalized.autoMasterTimeLeft),
     }))
 
     if (shouldClose) {
@@ -327,101 +340,31 @@ export function SettingsModal({
           <div className="setting-description">显示在对手分数下方</div>
         </div>
 
-        <div className="setting-group">
-          <label className="setting-label" htmlFor="option-wrap-chars">
-            选项换行字符数
-          </label>
-          <input
-            className="setting-input"
-            id="option-wrap-chars"
-            inputMode="numeric"
-            max="40"
-            min="1"
-            pattern="[0-9]*"
-            placeholder="16"
-            step="1"
-            type="text"
-            value={draft.optionWrapChars}
-            onBlur={() => commit(false)}
-            onChange={(event) => {
-              setDraft((prev) => ({
-                ...prev,
-                optionWrapChars: sanitizeDigitsInput(event.target.value),
-              }))
-            }}
-            onKeyDown={(event) => {
-              onlyNumericKeyboard(event)
-              if (event.key === 'Enter') {
-                commit(false)
-              }
-            }}
-          />
-          <div className="setting-description">默认 16</div>
-        </div>
-
-        <div className="setting-group">
-          <label className="setting-label" htmlFor="title-spacing-px">
-            标题间距（像素）
-          </label>
-          <input
-            className="setting-input"
-            id="title-spacing-px"
-            inputMode="numeric"
-            max="120"
-            min="0"
-            pattern="[0-9]*"
-            placeholder="30"
-            step="1"
-            type="text"
-            value={draft.titleSpacingPx}
-            onBlur={() => commit(false)}
-            onChange={(event) => {
-              setDraft((prev) => ({
-                ...prev,
-                titleSpacingPx: sanitizeDigitsInput(event.target.value),
-              }))
-            }}
-            onKeyDown={(event) => {
-              onlyNumericKeyboard(event)
-              if (event.key === 'Enter') {
-                commit(false)
-              }
-            }}
-          />
-          <div className="setting-description">默认 30</div>
-        </div>
-
-        <div className="setting-group">
-          <label className="setting-label" htmlFor="title-wrap-chars">
-            标题换行字符数
-          </label>
-          <input
-            className="setting-input"
-            id="title-wrap-chars"
-            inputMode="numeric"
-            max="80"
-            min="0"
-            pattern="[0-9]*"
-            placeholder="0"
-            step="1"
-            type="text"
-            value={draft.titleWrapChars}
-            onBlur={() => commit(false)}
-            onChange={(event) => {
-              setDraft((prev) => ({
-                ...prev,
-                titleWrapChars: sanitizeDigitsInput(event.target.value),
-              }))
-            }}
-            onKeyDown={(event) => {
-              onlyNumericKeyboard(event)
-              if (event.key === 'Enter') {
-                commit(false)
-              }
-            }}
-          />
-          <div className="setting-description">0 表示按容器宽度自动换行</div>
-        </div>
+        <DisplaySettingsFields
+          idPrefix="game"
+          optionWrapChars={draft.optionWrapChars}
+          titleSpacingPx={draft.titleSpacingPx}
+          titleWrapChars={draft.titleWrapChars}
+          onChangeOptionWrapChars={(value) => {
+            setDraft((prev) => ({
+              ...prev,
+              optionWrapChars: value,
+            }))
+          }}
+          onChangeTitleSpacingPx={(value) => {
+            setDraft((prev) => ({
+              ...prev,
+              titleSpacingPx: value,
+            }))
+          }}
+          onChangeTitleWrapChars={(value) => {
+            setDraft((prev) => ({
+              ...prev,
+              titleWrapChars: value,
+            }))
+          }}
+          onCommit={() => commit(false)}
+        />
 
         <div className="setting-group">
           <label className="setting-label" htmlFor="question-selection-strategy">
@@ -545,6 +488,38 @@ export function SettingsModal({
         </div>
 
         <div className="setting-group">
+          <label className="setting-label" htmlFor="auto-master-time-left">
+            自动标注掌握阈值
+          </label>
+          <input
+            className="setting-input"
+            id="auto-master-time-left"
+            inputMode="numeric"
+            max="999"
+            min="0"
+            pattern="[0-9]*"
+            placeholder="留空表示关闭"
+            step="1"
+            type="text"
+            value={draft.autoMasterTimeLeft}
+            onBlur={() => commit(false)}
+            onChange={(event) => {
+              setDraft((prev) => ({
+                ...prev,
+                autoMasterTimeLeft: sanitizeDigitsInput(event.target.value),
+              }))
+            }}
+            onKeyDown={(event) => {
+              onlyNumericKeyboard(event)
+              if (event.key === 'Enter') {
+                commit(false)
+              }
+            }}
+          />
+          <div className="setting-description">倒计时大于等于该数值且答对时，自动标注掌握</div>
+        </div>
+
+        <div className="setting-group">
           <label className="setting-label" htmlFor="fix-opponent-avatar">
             固定头像
           </label>
@@ -592,48 +567,7 @@ export function SettingsModal({
           <div className="setting-description">启用后无需手动点击继续</div>
         </div>
 
-        <div className="setting-group">
-          <label className="setting-label">用户数据</label>
-          <div className="speed-inputs">
-            <button className="btn btn-outline" disabled={userDataTransferBusy} type="button" onClick={onExportUserData}>
-              导出用户数据
-            </button>
-            <button
-              className="btn btn-outline"
-              disabled={userDataTransferBusy}
-              type="button"
-              onClick={() => {
-                importInputRef.current?.click()
-              }}
-            >
-              导入用户数据
-            </button>
-            <input
-              accept="application/json,.json"
-              ref={importInputRef}
-              style={{ display: 'none' }}
-              type="file"
-              onChange={(event) => {
-                const file = event.target.files?.[0]
-                if (!file) return
-                onImportUserData(file)
-                event.target.value = ''
-              }}
-            />
-          </div>
-          <div className="setting-description">手动备份或恢复当前浏览器中的本地用户数据</div>
-          {userDataTransferMessage ? <div className="setting-description">{userDataTransferMessage}</div> : null}
-        </div>
 
-        <div className="setting-group">
-          <label className="setting-label">历史答题记录</label>
-          <div className="speed-inputs">
-            <button className="btn btn-outline" disabled={userDataTransferBusy} type="button" onClick={onClearQuestionHistory}>
-              删除历史答题记录
-            </button>
-          </div>
-          <div className="setting-description">清空答题统计、热力图与题目作答记录，操作前会二次确认</div>
-        </div>
       </div>
 
       <div className="modal-footer">

@@ -27,6 +27,7 @@ export const LEGACY_KEYS = {
   titleSpacingPx: 'titleSpacingPx',
   titleWrapChars: 'titleWrapChars',
   questionSelectionStrategy: 'questionSelectionStrategy',
+  autoMasterTimeLeft: 'autoMasterTimeLeft',
 } as const
 
 export interface LegacyConfigSnapshot {
@@ -43,6 +44,7 @@ export interface LegacyConfigSnapshot {
   titleSpacingPx: number
   titleWrapChars: number
   questionSelectionStrategy: QuestionSelectionStrategy
+  autoMasterTimeLeft: number
 }
 
 const DEFAULT_QUESTION_SELECTION_STRATEGY: QuestionSelectionStrategy = 'shuffled_traversal_recent_first'
@@ -107,6 +109,7 @@ export function loadLegacyConfig(): LegacyConfigSnapshot {
     questionSelectionStrategy: normalizeQuestionSelectionStrategy(
       getString(LEGACY_KEYS.questionSelectionStrategy, DEFAULT_QUESTION_SELECTION_STRATEGY),
     ),
+    autoMasterTimeLeft: Math.max(0, Math.round(getNumber(LEGACY_KEYS.autoMasterTimeLeft, 0))),
   }
 }
 
@@ -149,4 +152,9 @@ export function saveLegacyDisplayConfig(config: {
 
 export function saveLegacyQuestionSelectionStrategy(strategy: QuestionSelectionStrategy): void {
   setValue(LEGACY_KEYS.questionSelectionStrategy, normalizeQuestionSelectionStrategy(strategy))
+}
+
+export function saveLegacyAutoMasterTimeLeft(value: number): void {
+  const normalized = Number.isFinite(value) ? Math.max(0, Math.round(value)) : 0
+  setValue(LEGACY_KEYS.autoMasterTimeLeft, normalized)
 }

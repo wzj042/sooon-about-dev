@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { APP_ROUTES } from '../app/paths'
 import { useShallow } from 'zustand/react/shallow'
@@ -23,13 +23,13 @@ import {
   loadLegacyConfig,
   saveLegacyAIConfig,
   saveLegacyAutoSkipEndScreen,
+  saveLegacyAutoMasterTimeLeft,
   saveLegacyAvatar,
   saveLegacyAvatarFixed,
   saveLegacyDisplayConfig,
   saveLegacyQuestionSelectionStrategy,
 } from '../services/legacyStorageCompat'
-import { clearQuestionHistory } from '../services/questionStats'
-import { exportUserData, importUserData } from '../services/userDataTransfer'
+import { setQuestionMastered } from '../services/questionStats'
 import { detachDebugSettle, attachDebugSettle } from '../store/actions/debug'
 import { useGameStore } from '../store/gameStore'
 
@@ -45,6 +45,7 @@ interface SettingsState {
   titleSpacingPx: number
   titleWrapChars: number
   questionSelectionStrategy: QuestionSelectionStrategy
+  autoMasterTimeLeft: number
 }
 
 function normalizeAvatarForSave(avatar: AvatarData, fallbackAvatarSrc: string): AvatarData {
@@ -72,6 +73,8 @@ export function GamePage() {
       opponentCorrect: state.opponentCorrect,
       correctAnswer: state.correctAnswer,
       gamePhase: state.gamePhase,
+      currentRound: state.currentRound,
+      totalRounds: state.totalRounds,
       maxScore: state.maxScore,
       practiceQueueMode: state.practiceQueueMode,
       practiceQueueTotal: state.practiceQueueTotal,
@@ -92,8 +95,6 @@ export function GamePage() {
   const [avatarOpen, setAvatarOpen] = useState(false)
   const [avatarContext, setAvatarContext] = useState<'player' | 'opponent'>('player')
   const [playerAvatarHtml, setPlayerAvatarHtml] = useState(DEFAULT_AVATAR_SRC)
-  const [userDataTransferBusy, setUserDataTransferBusy] = useState(false)
-  const [userDataTransferMessage, setUserDataTransferMessage] = useState<string | null>(null)
   const [settings, setSettings] = useState<SettingsState>({
     accuracyPercent: 60,
     minSpeedMs: 1280,
@@ -106,7 +107,9 @@ export function GamePage() {
     titleSpacingPx: DEFAULT_TITLE_SPACING_PX,
     titleWrapChars: DEFAULT_TITLE_WRAP_CHARS,
     questionSelectionStrategy: 'shuffled_traversal_recent_first',
+    autoMasterTimeLeft: 0,
   })
+  const autoMasterRoundRef = useRef<number | null>(null)
 
   const normalizedSettings = useMemo(
     () =>
@@ -150,6 +153,7 @@ export function GamePage() {
         titleSpacingPx: normalized.titleSpacingPx,
         titleWrapChars: normalized.titleWrapChars,
         questionSelectionStrategy: legacy.questionSelectionStrategy,
+        autoMasterTimeLeft: legacy.autoMasterTimeLeft,
       })
 
       store.updateAIConfig({
@@ -187,6 +191,34 @@ export function GamePage() {
     }
   }, [startNewGame])
 
+  useEffect(() => {
+    if (gameState.gamePhase === 'question' || gameState.gamePhase === 'waiting') {
+      autoMasterRoundRef.current = null
+    }
+  }, [gameState.gamePhase])
+
+  useEffect(() => {
+    if (gameState.gamePhase !== 'result') return
+    if (autoMasterRoundRef.current === gameState.currentRound) return
+    if (settings.autoMasterTimeLeft <= 0) return
+    if (!gameState.currentQuestion) return
+    if (gameState.playerCorrect !== true) return
+    const isFinalRound = gameState.totalRounds > 0 && gameState.currentRound === gameState.totalRounds
+    const effectiveTimeLeft = isFinalRound ? Math.floor(gameState.timeLeft / 2) : gameState.timeLeft
+    if (effectiveTimeLeft < settings.autoMasterTimeLeft) return
+
+    setQuestionMastered(gameState.currentQuestion, true)
+    autoMasterRoundRef.current = gameState.currentRound
+  }, [
+    gameState.currentQuestion,
+    gameState.currentRound,
+    gameState.gamePhase,
+    gameState.playerCorrect,
+    gameState.totalRounds,
+    gameState.timeLeft,
+    settings.autoMasterTimeLeft,
+  ])
+
   const applySettings = (params: {
     accuracyPercent: number
     minSpeedMs: number
@@ -201,6 +233,7 @@ export function GamePage() {
     titleSpacingPx: number
     titleWrapChars: number
     questionSelectionStrategy: QuestionSelectionStrategy
+    autoMasterTimeLeft: number
   }) => {
     setSettings({
       accuracyPercent: params.accuracyPercent,
@@ -214,6 +247,7 @@ export function GamePage() {
       titleSpacingPx: params.titleSpacingPx,
       titleWrapChars: params.titleWrapChars,
       questionSelectionStrategy: params.questionSelectionStrategy,
+      autoMasterTimeLeft: params.autoMasterTimeLeft,
     })
 
     updateAIConfig({
@@ -239,6 +273,7 @@ export function GamePage() {
       titleWrapChars: params.titleWrapChars,
     })
     saveLegacyQuestionSelectionStrategy(params.questionSelectionStrategy)
+    saveLegacyAutoMasterTimeLeft(params.autoMasterTimeLeft)
 
     if (params.avatarFixed) {
       saveLegacyAvatar('opponent', {
@@ -270,38 +305,6 @@ export function GamePage() {
     const normalized = normalizeAvatarForSave(avatar, DEFAULT_AVATAR_SRC)
     configureOpponent({ avatar: normalized.svg })
     saveLegacyAvatar('opponent', normalized)
-  }
-
-  const handleExportUserData = () => {
-    const result = exportUserData()
-    setUserDataTransferMessage(result.message)
-  }
-
-  const handleClearQuestionHistory = () => {
-    const firstConfirmed = window.confirm('将删除当前浏览器中的历史答题记录，是否继续？')
-    if (!firstConfirmed) return
-
-    const secondConfirmed = window.confirm('删除后无法恢复。确认删除历史答题记录吗？')
-    if (!secondConfirmed) return
-
-    clearQuestionHistory()
-    setUserDataTransferMessage('历史答题记录已删除')
-  }
-
-  const handleImportUserData = async (file: File) => {
-    const confirmed = window.confirm('导入将覆盖当前本地用户数据，是否继续？')
-    if (!confirmed) return
-
-    setUserDataTransferBusy(true)
-    const result = await importUserData(file)
-    setUserDataTransferBusy(false)
-    setUserDataTransferMessage(result.message)
-
-    if (result.ok) {
-      window.setTimeout(() => {
-        window.location.reload()
-      }, 400)
-    }
   }
 
   const footer = (
@@ -377,15 +380,9 @@ export function GamePage() {
           titleSpacingPx: normalizedSettings.titleSpacingPx,
           titleWrapChars: normalizedSettings.titleWrapChars,
           questionSelectionStrategy: settings.questionSelectionStrategy,
+          autoMasterTimeLeft: settings.autoMasterTimeLeft,
         }}
         onApply={applySettings}
-        onExportUserData={handleExportUserData}
-        onImportUserData={(file) => {
-          void handleImportUserData(file)
-        }}
-        onClearQuestionHistory={handleClearQuestionHistory}
-        userDataTransferBusy={userDataTransferBusy}
-        userDataTransferMessage={userDataTransferMessage}
         disableQuestionSelectionStrategy={gameState.practiceQueueMode}
         onClose={() => setSettingsOpen(false)}
         onOpenAvatarModal={(context) => {
