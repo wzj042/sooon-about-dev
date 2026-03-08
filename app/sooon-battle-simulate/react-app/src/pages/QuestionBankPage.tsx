@@ -64,12 +64,13 @@ type SortMode =
   | 'accuracy_desc'
   | 'accuracy_asc'
 
-type SearchScope = 'question' | 'options' | 'type'
+type SearchScope = 'question' | 'options' | 'answer' | 'type'
 
-const SEARCH_SCOPES: SearchScope[] = ['question', 'options', 'type']
+const SEARCH_SCOPES: SearchScope[] = ['question', 'options', 'answer', 'type']
 const DEFAULT_SEARCH_SCOPES: Record<SearchScope, boolean> = {
   question: true,
   options: true,
+  answer: true,
   type: true,
 }
 
@@ -381,6 +382,10 @@ function matchesKeyword(row: TableRow, normalizedKeyword: string, scopes: Record
 
   if (activeScopes.question) candidates.push(row.item.question)
   if (activeScopes.options) candidates.push(...row.item.options)
+  if (activeScopes.answer) {
+    const answerText = row.item.options[row.item.answer]
+    if (typeof answerText === 'string') candidates.push(answerText)
+  }
   if (activeScopes.type) candidates.push(row.normalizedType)
 
   return candidates.some((candidate) => candidate.toLowerCase().includes(normalizedKeyword))
@@ -524,6 +529,7 @@ export function QuestionBankPage() {
   const [startingQueuePractice, setStartingQueuePractice] = useState(false)
 
   const scrollContainerRef = useRef<HTMLDivElement | null>(null)
+  const searchInputRef = useRef<HTMLInputElement | null>(null)
   const tableRef = useRef<HTMLTableElement | null>(null)
   const resizingColumnRef = useRef<{ key: ColumnKey; startX: number; startWidth: number; pendingWidth: number } | null>(null)
   const resizeAnimationFrameRef = useRef<number | null>(null)
@@ -1183,13 +1189,29 @@ export function QuestionBankPage() {
           >
             <label className="flex flex-col gap-1 text-sm text-slate-700 xl:col-span-2">
               关键词搜索
-              <input
-                className="rounded-md border border-[#2196f3]/25 bg-white px-3 py-2 text-sm outline-none transition placeholder:text-slate-400 focus:border-[#2196f3] focus:ring-2 focus:ring-[#2196f3]/20"
-                placeholder="按题目、选项、类型搜索"
-                type="text"
-                value={keyword}
-                onChange={(event) => setKeyword(event.target.value)}
-              />
+              <div className="relative">
+                <input
+                  className="w-full rounded-md border border-[#2196f3]/25 bg-white px-3 py-2 pr-12 text-sm outline-none transition placeholder:text-slate-400 focus:border-[#2196f3] focus:ring-2 focus:ring-[#2196f3]/20"
+                  placeholder="按题目、选项、答案、类型搜索"
+                  ref={searchInputRef}
+                  type="text"
+                  value={keyword}
+                  onChange={(event) => setKeyword(event.target.value)}
+                />
+                {keyword ? (
+                  <button
+                    aria-label="清空搜索关键词"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full border border-transparent px-2 py-1 text-xs font-semibold text-slate-500 transition hover:border-[#2196f3]/30 hover:text-[#1b5fa6]"
+                    type="button"
+                    onClick={() => {
+                      setKeyword('')
+                      searchInputRef.current?.focus()
+                    }}
+                  >
+                    清空
+                  </button>
+                ) : null}
+              </div>
               <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-600">
                 <span className="font-semibold text-slate-500">搜索范围</span>
                 <label className="inline-flex items-center gap-1">
@@ -1209,6 +1231,15 @@ export function QuestionBankPage() {
                     onChange={() => toggleSearchScope('options')}
                   />
                   选项
+                </label>
+                <label className="inline-flex items-center gap-1">
+                  <input
+                    checked={searchScopes.answer}
+                    className="h-3.5 w-3.5 accent-[#2196f3]"
+                    type="checkbox"
+                    onChange={() => toggleSearchScope('answer')}
+                  />
+                  答案
                 </label>
                 <label className="inline-flex items-center gap-1">
                   <input
@@ -1343,6 +1374,33 @@ export function QuestionBankPage() {
           </div>
 
           <div className="mt-3 flex flex-wrap items-start gap-3">
+            {filtersCollapsed ? (
+              <div className="min-w-[220px] max-w-sm flex-1">
+                <div className="relative">
+                  <input
+                    className="w-full rounded-md border border-[#2196f3]/25 bg-white px-3 py-2 pr-12 text-sm outline-none transition placeholder:text-slate-400 focus:border-[#2196f3] focus:ring-2 focus:ring-[#2196f3]/20"
+                    placeholder="关键词搜索"
+                    ref={searchInputRef}
+                    type="text"
+                    value={keyword}
+                    onChange={(event) => setKeyword(event.target.value)}
+                  />
+                  {keyword ? (
+                    <button
+                      aria-label="清空搜索关键词"
+                      className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full border border-transparent px-2 py-1 text-xs font-semibold text-slate-500 transition hover:border-[#2196f3]/30 hover:text-[#1b5fa6]"
+                      type="button"
+                      onClick={() => {
+                        setKeyword('')
+                        searchInputRef.current?.focus()
+                      }}
+                    >
+                      清空
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
             <button
               className="inline-flex items-center rounded-md border border-emerald-400/60 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700 transition hover:border-emerald-500 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
               disabled={filteredRows.length === 0}
