@@ -27,6 +27,7 @@ export const LEGACY_KEYS = {
   titleSpacingPx: 'titleSpacingPx',
   titleWrapChars: 'titleWrapChars',
   questionSelectionStrategy: 'questionSelectionStrategy',
+  questionSelectionCommonSenseType: 'questionSelectionCommonSenseType',
   questionRandomMode: 'questionRandomMode',
   autoMasterTimeLeft: 'autoMasterTimeLeft',
 } as const
@@ -45,6 +46,7 @@ export interface LegacyConfigSnapshot {
   titleSpacingPx: number
   titleWrapChars: number
   questionSelectionStrategy: QuestionSelectionStrategy
+  questionSelectionCommonSenseType: string
   questionRandomMode: QuestionRandomMode
   autoMasterTimeLeft: number
 }
@@ -144,6 +146,7 @@ export function loadLegacyConfig(): LegacyConfigSnapshot {
     titleSpacingPx: normalizeTitleSpacingPx(getNumber(LEGACY_KEYS.titleSpacingPx, DEFAULT_TITLE_SPACING_PX)),
     titleWrapChars: normalizeTitleWrapChars(getNumber(LEGACY_KEYS.titleWrapChars, DEFAULT_TITLE_WRAP_CHARS)),
     questionSelectionStrategy: normalizedQuestionSettings.questionSelectionStrategy,
+    questionSelectionCommonSenseType: getString(LEGACY_KEYS.questionSelectionCommonSenseType, '').trim(),
     questionRandomMode: normalizedQuestionSettings.questionRandomMode,
     autoMasterTimeLeft: Math.max(0, Math.round(getNumber(LEGACY_KEYS.autoMasterTimeLeft, 0))),
   }
@@ -188,6 +191,10 @@ export function saveLegacyDisplayConfig(config: {
 
 export function saveLegacyQuestionSelectionStrategy(strategy: QuestionSelectionStrategy): void {
   setValue(LEGACY_KEYS.questionSelectionStrategy, normalizeQuestionSelectionStrategy(strategy))
+}
+
+export function saveLegacyQuestionSelectionCommonSenseType(type: string): void {
+  setValue(LEGACY_KEYS.questionSelectionCommonSenseType, type.trim())
 }
 
 export function saveLegacyQuestionRandomMode(mode: QuestionRandomMode): void {

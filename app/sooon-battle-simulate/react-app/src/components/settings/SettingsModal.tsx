@@ -2,7 +2,7 @@
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
 
 import type { QuestionRandomMode, QuestionSelectionStrategy } from '../../domain/types'
-import type { QuestionSelectionCounts } from '../../services/questionSelection'
+import type { CommonSenseSubtypeCounts, QuestionSelectionCounts } from '../../services/questionSelection'
 import { DEFAULT_AVATAR_SRC, isImageAvatarSource } from '../../domain/avatar'
 import { normalizePublicAssetUrl } from '../../utils/publicAsset'
 import {
@@ -33,9 +33,11 @@ interface SettingsModalProps {
     titleSpacingPx: number
     titleWrapChars: number
     questionSelectionStrategy: QuestionSelectionStrategy
+    questionSelectionCommonSenseType: string
     questionRandomMode: QuestionRandomMode
     autoMasterTimeLeft: number
   }
+  commonSenseSubtypeCounts: CommonSenseSubtypeCounts
   questionSelectionCounts: QuestionSelectionCounts
   questionSelectionCountsLoading?: boolean
   playerAvatarHtml: string
@@ -55,6 +57,7 @@ interface SettingsModalProps {
     titleSpacingPx: number
     titleWrapChars: number
     questionSelectionStrategy: QuestionSelectionStrategy
+    questionSelectionCommonSenseType: string
     questionRandomMode: QuestionRandomMode
     autoMasterTimeLeft: number
   }) => void
@@ -74,6 +77,7 @@ interface DraftState {
   titleSpacingPx: string
   titleWrapChars: string
   questionSelectionStrategy: QuestionSelectionStrategy
+  questionSelectionCommonSenseType: string
   questionRandomMode: QuestionRandomMode
   autoMasterTimeLeft: string
 }
@@ -108,6 +112,7 @@ function onlyNumericKeyboard(event: ReactKeyboardEvent<HTMLInputElement>) {
 export function SettingsModal({
   open,
   values,
+  commonSenseSubtypeCounts,
   questionSelectionCounts,
   questionSelectionCountsLoading = false,
   playerAvatarHtml,
@@ -129,6 +134,7 @@ export function SettingsModal({
     titleSpacingPx,
     titleWrapChars,
     questionSelectionStrategy,
+    questionSelectionCommonSenseType,
     questionRandomMode,
     autoMasterTimeLeft,
   } = values
@@ -145,6 +151,7 @@ export function SettingsModal({
     titleSpacingPx: String(DEFAULT_TITLE_SPACING_PX),
     titleWrapChars: String(DEFAULT_TITLE_WRAP_CHARS),
     questionSelectionStrategy: 'all_questions',
+    questionSelectionCommonSenseType: '',
     questionRandomMode: 'shuffled_cycle',
     autoMasterTimeLeft: '0',
   })
@@ -163,6 +170,7 @@ export function SettingsModal({
       titleSpacingPx: String(titleSpacingPx),
       titleWrapChars: String(titleWrapChars),
       questionSelectionStrategy,
+      questionSelectionCommonSenseType,
       questionRandomMode,
       autoMasterTimeLeft: String(autoMasterTimeLeft),
     })
@@ -178,6 +186,7 @@ export function SettingsModal({
     playerId,
     questionRandomMode,
     questionSelectionStrategy,
+    questionSelectionCommonSenseType,
     titleSpacingPx,
     titleWrapChars,
     autoMasterTimeLeft,
@@ -244,6 +253,7 @@ export function SettingsModal({
       titleSpacingPx: normalized.titleSpacingPx,
       titleWrapChars: normalized.titleWrapChars,
       questionSelectionStrategy: draft.questionSelectionStrategy,
+      questionSelectionCommonSenseType: draft.questionSelectionCommonSenseType,
       questionRandomMode: draft.questionRandomMode,
       autoMasterTimeLeft: normalized.autoMasterTimeLeft,
     })
@@ -259,6 +269,7 @@ export function SettingsModal({
       titleSpacingPx: String(normalized.titleSpacingPx),
       titleWrapChars: String(normalized.titleWrapChars),
       questionSelectionStrategy: prev.questionSelectionStrategy,
+      questionSelectionCommonSenseType: prev.questionSelectionCommonSenseType,
       questionRandomMode: prev.questionRandomMode,
       autoMasterTimeLeft: String(normalized.autoMasterTimeLeft),
     }))
@@ -268,7 +279,10 @@ export function SettingsModal({
     }
   }
 
-  const strategyAvailableCount = questionSelectionCounts[draft.questionSelectionStrategy] ?? 0
+  const strategyAvailableCount =
+    draft.questionSelectionStrategy === 'common_sense_only' && draft.questionSelectionCommonSenseType
+      ? (commonSenseSubtypeCounts[draft.questionSelectionCommonSenseType] ?? 0)
+      : (questionSelectionCounts[draft.questionSelectionStrategy] ?? 0)
   const totalQuestionCount = questionSelectionCounts.all_questions
   const strategyAvailabilityText = questionSelectionCountsLoading
     ? '正在统计当前策略可用题数...'
@@ -278,6 +292,22 @@ export function SettingsModal({
     : draft.questionRandomMode === 'shuffled_cycle'
       ? `从这 ${strategyAvailableCount} 题中打乱后依次出题，不重复`
       : `从这 ${strategyAvailableCount} 题中每轮随机抽取，可重复`
+  const formatCount = (count: number) => (questionSelectionCountsLoading ? '...' : String(count))
+  const strategyOptions: Array<{ value: QuestionSelectionStrategy; label: string }> = [
+    { value: 'all_questions', label: `全部题目 (${formatCount(questionSelectionCounts.all_questions)})` },
+    { value: 'unseen_first', label: `做未做过的题 (${formatCount(questionSelectionCounts.unseen_first)})` },
+    { value: 'mistake_focused', label: `做易错题 (${formatCount(questionSelectionCounts.mistake_focused)})` },
+    { value: 'slow_thinking_focused', label: `做想得久的题 (${formatCount(questionSelectionCounts.slow_thinking_focused)})` },
+    { value: 'common_sense_only', label: `做常识题 (${formatCount(questionSelectionCounts.common_sense_only)})` },
+    { value: 'ethics_only', label: `做素问题 (${formatCount(questionSelectionCounts.ethics_only)})` },
+    { value: 'unmastered_only', label: `做未掌握题 (${formatCount(questionSelectionCounts.unmastered_only)})` },
+    { value: 'mastered_only', label: `做掌握题 (${formatCount(questionSelectionCounts.mastered_only)})` },
+  ]
+  const commonSenseSubtypeOptions = useMemo(
+    () =>
+      Object.entries(commonSenseSubtypeCounts).sort(([left], [right]) => left.localeCompare(right, 'zh-CN')),
+    [commonSenseSubtypeCounts],
+  )
 
   return (
     <Modal open={open} title="游戏设置" onClose={onClose}>
@@ -408,19 +438,45 @@ export function SettingsModal({
               }))
             }}
           >
-            <option value="all_questions">全部题目</option>
-            <option value="unseen_first">做未做过的题</option>
-            <option value="mistake_focused">做易错题</option>
-            <option value="slow_thinking_focused">做想得久的题</option>
-            <option value="common_sense_only">做常识题（common_sense）</option>
-            <option value="ethics_only">做伦理题</option>
-            <option value="unmastered_only">做未掌握题</option>
-            <option value="mastered_only">做掌握题</option>
+            {strategyOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
           </select>
           <div className="setting-description">
             {disableQuestionSelectionStrategy ? '当前为队列顺序答题模式，题目来源策略已禁用' : strategyAvailabilityText}
           </div>
         </div>
+
+        {draft.questionSelectionStrategy === 'common_sense_only' ? (
+          <div className="setting-group">
+            <label className="setting-label" htmlFor="question-selection-common-sense-type">
+              常识细分类型
+            </label>
+            <select
+              className="setting-input"
+              disabled={disableQuestionSelectionStrategy}
+              id="question-selection-common-sense-type"
+              value={draft.questionSelectionCommonSenseType}
+              onBlur={() => commit(false)}
+              onChange={(event) => {
+                setDraft((prev) => ({
+                  ...prev,
+                  questionSelectionCommonSenseType: event.target.value,
+                }))
+              }}
+            >
+              <option value="">全部常识 ({formatCount(questionSelectionCounts.common_sense_only)})</option>
+              {commonSenseSubtypeOptions.map(([type, count]) => (
+                <option key={type} value={type}>
+                  {type} ({count})
+                </option>
+              ))}
+            </select>
+            <div className="setting-description">列出当前题库中除“素问”和“常识”外的常识细分 type</div>
+          </div>
+        ) : null}
 
         <div className="setting-group">
           <label className="setting-label" htmlFor="question-random-mode">

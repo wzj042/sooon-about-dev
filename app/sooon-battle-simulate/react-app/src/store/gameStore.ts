@@ -68,6 +68,7 @@ const DEFAULT_STATE = {
   aiSpeedRange: [1280, 2900] as [number, number],
   aiAccuracy: 0.6,
   questionSelectionStrategy: DEFAULT_QUESTION_SELECTION_STRATEGY,
+  questionSelectionCommonSenseType: '',
   questionRandomMode: DEFAULT_QUESTION_RANDOM_MODE,
   practiceQueueMode: false,
   practiceQueueTotal: 0,
@@ -179,7 +180,12 @@ export const useGameStore = create<GameStore>((set, get) => {
     }
 
     const state = get()
-    questionSelectionPool = buildQuestionSelectionPool(questionBank, state.questionSelectionStrategy, loadQuestionStatsMap())
+    questionSelectionPool = buildQuestionSelectionPool(
+      questionBank,
+      state.questionSelectionStrategy,
+      loadQuestionStatsMap(),
+      state.questionSelectionCommonSenseType,
+    )
 
     if (questionSelectionPool.length === 0) {
       selectedQuestions = []
@@ -615,6 +621,14 @@ export const useGameStore = create<GameStore>((set, get) => {
       questionSelectionPool = []
       set({
         questionSelectionStrategy: strategy,
+      })
+    },
+
+    updateQuestionSelectionCommonSenseType: (type) => {
+      selectedQuestions = []
+      questionSelectionPool = []
+      set({
+        questionSelectionCommonSenseType: type.trim(),
       })
     },
 

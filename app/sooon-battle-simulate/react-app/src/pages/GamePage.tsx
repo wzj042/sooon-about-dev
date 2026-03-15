@@ -28,10 +28,17 @@ import {
   saveLegacyAvatarFixed,
   saveLegacyDisplayConfig,
   saveLegacyQuestionRandomMode,
+  saveLegacyQuestionSelectionCommonSenseType,
   saveLegacyQuestionSelectionStrategy,
 } from '../services/legacyStorageCompat'
 import { loadQuestionBank } from '../services/questionBank'
-import { buildQuestionSelectionCounts, DEFAULT_QUESTION_SELECTION_COUNTS, type QuestionSelectionCounts } from '../services/questionSelection'
+import {
+  buildCommonSenseSubtypeCounts,
+  buildQuestionSelectionCounts,
+  DEFAULT_QUESTION_SELECTION_COUNTS,
+  type CommonSenseSubtypeCounts,
+  type QuestionSelectionCounts,
+} from '../services/questionSelection'
 import { loadQuestionStatsMap, setQuestionMastered, subscribeQuestionStats } from '../services/questionStats'
 import { detachDebugSettle, attachDebugSettle } from '../store/actions/debug'
 import { useGameStore } from '../store/gameStore'
@@ -48,6 +55,7 @@ interface SettingsState {
   titleSpacingPx: number
   titleWrapChars: number
   questionSelectionStrategy: QuestionSelectionStrategy
+  questionSelectionCommonSenseType: string
   questionRandomMode: QuestionRandomMode
   autoMasterTimeLeft: number
 }
@@ -94,6 +102,7 @@ export function GamePage() {
   const updateAIConfig = useGameStore((state) => state.updateAIConfig)
   const setAvatarFixed = useGameStore((state) => state.setAvatarFixed)
   const updateQuestionSelectionStrategy = useGameStore((state) => state.updateQuestionSelectionStrategy)
+  const updateQuestionSelectionCommonSenseType = useGameStore((state) => state.updateQuestionSelectionCommonSenseType)
   const updateQuestionRandomMode = useGameStore((state) => state.updateQuestionRandomMode)
 
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -101,6 +110,7 @@ export function GamePage() {
   const [avatarContext, setAvatarContext] = useState<'player' | 'opponent'>('player')
   const [playerAvatarHtml, setPlayerAvatarHtml] = useState(DEFAULT_AVATAR_SRC)
   const [questionSelectionCounts, setQuestionSelectionCounts] = useState<QuestionSelectionCounts>(DEFAULT_QUESTION_SELECTION_COUNTS)
+  const [commonSenseSubtypeCounts, setCommonSenseSubtypeCounts] = useState<CommonSenseSubtypeCounts>({})
   const [questionSelectionCountsLoading, setQuestionSelectionCountsLoading] = useState(true)
   const [settings, setSettings] = useState<SettingsState>({
     accuracyPercent: 60,
@@ -114,6 +124,7 @@ export function GamePage() {
     titleSpacingPx: DEFAULT_TITLE_SPACING_PX,
     titleWrapChars: DEFAULT_TITLE_WRAP_CHARS,
     questionSelectionStrategy: 'all_questions',
+    questionSelectionCommonSenseType: '',
     questionRandomMode: 'shuffled_cycle',
     autoMasterTimeLeft: 0,
   })
@@ -161,6 +172,7 @@ export function GamePage() {
         titleSpacingPx: normalized.titleSpacingPx,
         titleWrapChars: normalized.titleWrapChars,
         questionSelectionStrategy: legacy.questionSelectionStrategy,
+        questionSelectionCommonSenseType: legacy.questionSelectionCommonSenseType,
         questionRandomMode: legacy.questionRandomMode,
         autoMasterTimeLeft: legacy.autoMasterTimeLeft,
       })
@@ -172,6 +184,7 @@ export function GamePage() {
 
       store.setAvatarFixed(legacy.avatarFixed)
       store.updateQuestionSelectionStrategy(legacy.questionSelectionStrategy)
+      store.updateQuestionSelectionCommonSenseType(legacy.questionSelectionCommonSenseType)
       store.updateQuestionRandomMode(legacy.questionRandomMode)
 
       if (legacy.playerAvatarData?.svg) {
@@ -238,6 +251,7 @@ export function GamePage() {
         if (cancelled) return
         const statsMap = loadQuestionStatsMap()
         setQuestionSelectionCounts(buildQuestionSelectionCounts(bank, statsMap))
+        setCommonSenseSubtypeCounts(buildCommonSenseSubtypeCounts(bank))
       } finally {
         if (!cancelled) {
           setQuestionSelectionCountsLoading(false)
@@ -270,6 +284,7 @@ export function GamePage() {
     titleSpacingPx: number
     titleWrapChars: number
     questionSelectionStrategy: QuestionSelectionStrategy
+    questionSelectionCommonSenseType: string
     questionRandomMode: QuestionRandomMode
     autoMasterTimeLeft: number
   }) => {
@@ -285,6 +300,7 @@ export function GamePage() {
       titleSpacingPx: params.titleSpacingPx,
       titleWrapChars: params.titleWrapChars,
       questionSelectionStrategy: params.questionSelectionStrategy,
+      questionSelectionCommonSenseType: params.questionSelectionCommonSenseType,
       questionRandomMode: params.questionRandomMode,
       autoMasterTimeLeft: params.autoMasterTimeLeft,
     })
@@ -296,6 +312,7 @@ export function GamePage() {
 
     setAvatarFixed(params.avatarFixed)
     updateQuestionSelectionStrategy(params.questionSelectionStrategy)
+    updateQuestionSelectionCommonSenseType(params.questionSelectionCommonSenseType)
     updateQuestionRandomMode(params.questionRandomMode)
 
     saveLegacyAIConfig({
@@ -313,6 +330,7 @@ export function GamePage() {
       titleWrapChars: params.titleWrapChars,
     })
     saveLegacyQuestionSelectionStrategy(params.questionSelectionStrategy)
+    saveLegacyQuestionSelectionCommonSenseType(params.questionSelectionCommonSenseType)
     saveLegacyQuestionRandomMode(params.questionRandomMode)
     saveLegacyAutoMasterTimeLeft(params.autoMasterTimeLeft)
 
@@ -421,9 +439,11 @@ export function GamePage() {
           titleSpacingPx: normalizedSettings.titleSpacingPx,
           titleWrapChars: normalizedSettings.titleWrapChars,
           questionSelectionStrategy: settings.questionSelectionStrategy,
+          questionSelectionCommonSenseType: settings.questionSelectionCommonSenseType,
           questionRandomMode: settings.questionRandomMode,
           autoMasterTimeLeft: settings.autoMasterTimeLeft,
         }}
+        commonSenseSubtypeCounts={commonSenseSubtypeCounts}
         questionSelectionCounts={questionSelectionCounts}
         questionSelectionCountsLoading={questionSelectionCountsLoading}
         onApply={applySettings}

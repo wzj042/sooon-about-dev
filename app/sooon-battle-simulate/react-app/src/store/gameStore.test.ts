@@ -37,8 +37,14 @@ vi.mock('../services/questionStats', () => ({
     return (entry.totalResponseMs ?? 0) / entry.answeredCount
   }),
   recordQuestionAttempt: vi.fn(() => undefined),
-  isCommonSenseType: vi.fn((type?: string) => typeof type === 'string' && type.trim().toLowerCase() === 'common_sense'),
-  isEthicsType: vi.fn((type?: string) => typeof type === 'string' && type.trim().toLowerCase() === 'sooon_ai'),
+  isCommonSenseType: vi.fn((type?: string) => {
+    const normalized = typeof type === 'string' ? type.trim().toLowerCase() : ''
+    return normalized.length > 0 && normalized !== '素问' && normalized !== 'sooon_ai' && normalized !== 'ethics' && normalized !== '伦理'
+  }),
+  isEthicsType: vi.fn((type?: string) => {
+    const normalized = typeof type === 'string' ? type.trim().toLowerCase() : ''
+    return normalized === 'sooon_ai' || normalized === '素问' || normalized === '伦理'
+  }),
 }))
 
 function createQuestion(id: string, type?: string): QuestionItem {
@@ -85,7 +91,7 @@ describe('gameStore battle scenarios', () => {
 
   it('does not enter placeholder round when strict strategy has no matching questions', async () => {
     const useGameStore = await loadStore()
-    mockPoolRef.current = [createQuestion('ethics-a', 'ethics'), createQuestion('ethics-b', 'ethics')]
+    mockPoolRef.current = [createQuestion('suwen-a', '素问'), createQuestion('suwen-b', '素问')]
 
     useGameStore.getState().updateQuestionSelectionStrategy('common_sense_only')
     await useGameStore.getState().startNewGame()
@@ -143,6 +149,19 @@ describe('gameStore battle scenarios', () => {
     await useGameStore.getState().startNewGame()
 
     expect(useGameStore.getState().currentQuestion).toBe('q-b')
+    expect(useGameStore.getState().totalRounds).toBe(1)
+    expect(useGameStore.getState().questionLoadError).toBeNull()
+  })
+
+  it('limits common_sense_only strategy to the selected subtype', async () => {
+    const useGameStore = await loadStore()
+    mockPoolRef.current = [createQuestion('chemistry-a', '化学'), createQuestion('physics-a', '物理'), createQuestion('base', '常识'), createQuestion('suwen', '素问')]
+
+    useGameStore.getState().updateQuestionSelectionStrategy('common_sense_only')
+    useGameStore.getState().updateQuestionSelectionCommonSenseType('化学')
+    await useGameStore.getState().startNewGame()
+
+    expect(useGameStore.getState().currentQuestion).toBe('q-chemistry-a')
     expect(useGameStore.getState().totalRounds).toBe(1)
     expect(useGameStore.getState().questionLoadError).toBeNull()
   })

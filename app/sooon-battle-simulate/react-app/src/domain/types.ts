@@ -93,6 +93,7 @@ export interface GameState {
   aiSpeedRange: [number, number]
   aiAccuracy: number
   questionSelectionStrategy: QuestionSelectionStrategy
+  questionSelectionCommonSenseType: string
   questionRandomMode: QuestionRandomMode
   practiceQueueMode: boolean
   practiceQueueTotal: number
@@ -114,6 +115,7 @@ export interface GameActions {
   setAvatarFixed(fixed: boolean): void
   updateAIConfig(params: { accuracy?: number; speedMsRange?: [number, number] }): void
   updateQuestionSelectionStrategy(strategy: QuestionSelectionStrategy): void
+  updateQuestionSelectionCommonSenseType(type: string): void
   updateQuestionRandomMode(mode: QuestionRandomMode): void
   setPracticeQueue(questions: QuestionItem[], practicedCount?: number): void
   reset(): void

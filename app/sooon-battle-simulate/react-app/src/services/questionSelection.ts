@@ -2,6 +2,7 @@ import type { QuestionItem, QuestionSelectionStrategy } from '../domain/types'
 import { averageResponseMs, getQuestionStat, isCommonSenseType, isEthicsType, type QuestionStatsMap } from './questionStats'
 
 export type QuestionSelectionCounts = Record<QuestionSelectionStrategy, number>
+export type CommonSenseSubtypeCounts = Record<string, number>
 
 export const DEFAULT_QUESTION_SELECTION_COUNTS: QuestionSelectionCounts = {
   all_questions: 0,
@@ -31,10 +32,21 @@ function compareQuestions(left: QuestionItem, right: QuestionItem): number {
   return left.question.localeCompare(right.question, 'zh-CN')
 }
 
+function normalizeType(type?: string): string {
+  return typeof type === 'string' ? type.trim() : ''
+}
+
+function matchesCommonSenseSubtype(item: QuestionItem, commonSenseSubtype: string): boolean {
+  if (!isCommonSenseType(item.type)) return false
+  if (!commonSenseSubtype) return true
+  return normalizeType(item.type) === commonSenseSubtype
+}
+
 export function buildQuestionSelectionPool(
   bank: QuestionItem[],
   strategy: QuestionSelectionStrategy,
   statsMap: QuestionStatsMap,
+  commonSenseSubtype = '',
 ): QuestionItem[] {
   const deduped = dedupeQuestionBank(bank)
 
@@ -72,7 +84,7 @@ export function buildQuestionSelectionPool(
   }
 
   if (strategy === 'common_sense_only') {
-    return deduped.filter((item) => isCommonSenseType(item.type))
+    return deduped.filter((item) => matchesCommonSenseSubtype(item, commonSenseSubtype))
   }
 
   if (strategy === 'ethics_only') {
@@ -97,4 +109,17 @@ export function buildQuestionSelectionCounts(bank: QuestionItem[], statsMap: Que
     unmastered_only: buildQuestionSelectionPool(bank, 'unmastered_only', statsMap).length,
     mastered_only: buildQuestionSelectionPool(bank, 'mastered_only', statsMap).length,
   }
+}
+
+export function buildCommonSenseSubtypeCounts(bank: QuestionItem[]): CommonSenseSubtypeCounts {
+  const counts: CommonSenseSubtypeCounts = {}
+
+  for (const item of dedupeQuestionBank(bank)) {
+    const normalizedType = normalizeType(item.type)
+    if (normalizedType.length === 0 || normalizedType === '常识') continue
+    if (!isCommonSenseType(normalizedType)) continue
+    counts[normalizedType] = (counts[normalizedType] ?? 0) + 1
+  }
+
+  return counts
 }
