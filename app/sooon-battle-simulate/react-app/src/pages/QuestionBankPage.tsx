@@ -10,7 +10,7 @@ import {
   loadQuestionPool,
   type QuestionBankCacheState,
 } from '../services/questionBank'
-import { MIN_PRACTICE_QUEUE_ITEMS, savePracticeQueue } from '../services/practiceQueue'
+import { savePracticeQueue } from '../services/practiceQueue'
 import {
   averageResponseMs,
   loadQuestionStatsMap,
@@ -36,7 +36,7 @@ const SUWEN_TYPE = '素问'
 const COMMON_SENSE_TYPE_VALUE = '__common_sense_non_suwen__'
 const COMMON_SENSE_TYPE_LABEL = '🌌常识'
 const TYPE_FILTERS: TypeFilter[] = ['all', 'with_type', 'without_type']
-const STATS_FILTERS: StatsFilterMode[] = ['all', 'wrong_only', 'unseen_only', 'mastered_only']
+const STATS_FILTERS: StatsFilterMode[] = ['all', 'wrong_only', 'unseen_only', 'unmastered_only', 'mastered_only']
 const SORT_MODES: SortMode[] = [
   'updated_desc',
   'updated_asc',
@@ -51,7 +51,7 @@ const SORT_MODES: SortMode[] = [
 ]
 
 type TypeFilter = 'all' | 'with_type' | 'without_type'
-type StatsFilterMode = 'all' | 'wrong_only' | 'unseen_only' | 'mastered_only'
+type StatsFilterMode = 'all' | 'wrong_only' | 'unseen_only' | 'unmastered_only' | 'mastered_only'
 type SortMode =
   | 'updated_desc'
   | 'updated_asc'
@@ -279,6 +279,7 @@ function loadFilterStateFromStorage(): {
   selectedType?: string
   sortMode?: SortMode
   selectedDate?: string
+  invertMatch?: boolean
   searchScopes?: Record<SearchScope, boolean>
 } {
   if (typeof window === 'undefined') return {}
@@ -296,12 +297,14 @@ function loadFilterStateFromStorage(): {
       selectedType?: string
       sortMode?: SortMode
       selectedDate?: string
+      invertMatch?: boolean
       searchScopes?: Record<SearchScope, boolean>
     } = {}
 
     if (typeof parsed.keyword === 'string') next.keyword = parsed.keyword
     if (typeof parsed.selectedType === 'string') next.selectedType = parsed.selectedType
     if (typeof parsed.selectedDate === 'string') next.selectedDate = parsed.selectedDate
+    if (typeof parsed.invertMatch === 'boolean') next.invertMatch = parsed.invertMatch
     if (typeof parsed.typeFilter === 'string' && TYPE_FILTERS.includes(parsed.typeFilter as TypeFilter)) {
       next.typeFilter = parsed.typeFilter as TypeFilter
     }
@@ -360,6 +363,7 @@ function matchesTypeScopeFilters(row: TableRow, typeFilter: TypeFilter, statsFil
   if (typeFilter === 'without_type' && row.normalizedType.length > 0) return false
   if (statsFilterMode === 'wrong_only' && (!row.statEntry || row.statEntry.wrongCount <= 0)) return false
   if (statsFilterMode === 'unseen_only' && row.statEntry && row.statEntry.seenCount > 0) return false
+  if (statsFilterMode === 'unmastered_only' && row.statEntry?.mastered === true) return false
   if (statsFilterMode === 'mastered_only' && (!row.statEntry || row.statEntry.mastered !== true)) return false
   return true
 }
@@ -508,6 +512,7 @@ export function QuestionBankPage() {
   const [keyword, setKeyword] = useState(initialFilterState.keyword ?? '')
   const [typeFilter, setTypeFilter] = useState<TypeFilter>(initialFilterState.typeFilter ?? 'all')
   const [statsFilterMode, setStatsFilterMode] = useState<StatsFilterMode>(initialFilterState.statsFilterMode ?? 'all')
+  const [invertMatch, setInvertMatch] = useState(initialFilterState.invertMatch === true)
   const [selectedType, setSelectedType] = useState(initialFilterState.selectedType ?? 'all')
   const [sortMode, setSortMode] = useState<SortMode>(initialFilterState.sortMode ?? 'updated_desc')
   const [selectedDate, setSelectedDate] = useState(initialFilterState.selectedDate ?? '')
@@ -639,6 +644,7 @@ export function QuestionBankPage() {
           keyword,
           typeFilter,
           statsFilterMode,
+          invertMatch,
           selectedType,
           sortMode,
           selectedDate,
@@ -648,7 +654,7 @@ export function QuestionBankPage() {
     } catch {
       // Ignore storage errors to avoid blocking table interactions.
     }
-  }, [keyword, typeFilter, statsFilterMode, selectedType, sortMode, selectedDate, searchScopes])
+  }, [invertMatch, keyword, typeFilter, statsFilterMode, selectedType, sortMode, selectedDate, searchScopes])
 
   const normalizedKeyword = keyword.trim().toLowerCase()
 
@@ -731,7 +737,7 @@ export function QuestionBankPage() {
     return typeScopedRows.filter((row) => matchesSelectedType(row, selectedType))
   }, [selectedType, typeScopedRows])
 
-  const filteredRows = useMemo(() => {
+  const matchedRows = useMemo(() => {
     return buildFilteredRows({
       sourceRows: selectedTypeRows,
       normalizedKeyword,
@@ -742,13 +748,28 @@ export function QuestionBankPage() {
     })
   }, [normalizedKeyword, searchScopes, selectedDate, selectedTypeRows, shuffleTick, sortMode])
 
+  const filteredRows = useMemo(() => {
+    if (!invertMatch) return matchedRows
+
+    const matchedKeys = new Set(matchedRows.map((row) => buildOptionRevealKey(row)))
+    const complementRows = preparedRows.filter((row) => !matchedKeys.has(buildOptionRevealKey(row)))
+    return buildFilteredRows({
+      sourceRows: complementRows,
+      normalizedKeyword: '',
+      searchScopes,
+      selectedDate: '',
+      shuffleTick,
+      sortMode,
+    })
+  }, [invertMatch, matchedRows, preparedRows, searchScopes, shuffleTick, sortMode])
+
   useEffect(() => {
     const node = scrollContainerRef.current
     if (node) {
       node.scrollTop = 0
     }
     setScrollTop(0)
-  }, [normalizedKeyword, searchScopes, selectedDate, selectedType, shuffleTick, sortMode, statsFilterMode, typeFilter])
+  }, [invertMatch, normalizedKeyword, searchScopes, selectedDate, selectedType, shuffleTick, sortMode, statsFilterMode, typeFilter])
 
   useEffect(() => {
     const node = scrollContainerRef.current
@@ -894,15 +915,14 @@ export function QuestionBankPage() {
       const queueRows = filteredRows
 
       const queue = queueRows.map((row) => row.item)
-      const effectiveQueueCount = queueRows.filter((row) => row.statEntry?.mastered !== true).length
-      if (effectiveQueueCount < MIN_PRACTICE_QUEUE_ITEMS) {
-        window.alert(`当前显示队列未掌握题仅 ${effectiveQueueCount} 题，最少需要 ${MIN_PRACTICE_QUEUE_ITEMS} 题才能开始练习`)
+      if (queue.length <= 0) {
+        window.alert('当前筛选结果为空，无法开启队列练习')
         return
       }
 
       const count = savePracticeQueue(queue)
-      if (count < MIN_PRACTICE_QUEUE_ITEMS) {
-        window.alert(`当前可练习题目仅 ${count} 题，最少需要 ${MIN_PRACTICE_QUEUE_ITEMS} 题才能开始练习`)
+      if (count <= 0) {
+        window.alert('当前筛选结果为空，无法开启队列练习')
         return
       }
       navigate(APP_ROUTES.queuePractice)
@@ -1351,6 +1371,7 @@ export function QuestionBankPage() {
                 <option value="all">全部题目</option>
                 <option value="wrong_only">仅错题</option>
                 <option value="unseen_only">仅未做题</option>
+                <option value="unmastered_only">仅未掌握题</option>
                 <option value="mastered_only">仅掌握题</option>
               </select>
             </label>
@@ -1359,8 +1380,15 @@ export function QuestionBankPage() {
 
           <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-slate-600">
             <span>本地库题目: {rows.length}</span>
-            <span>筛选后: {filteredRows.length}</span>
+            <span>{invertMatch ? '反转后' : '筛选后'}: {filteredRows.length}</span>
             {syncing ? <span className="font-medium text-[#2196f3]">本地缓存后台同步中...</span> : null}
+            <button
+              className="inline-flex items-center rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-100"
+              type="button"
+              onClick={() => setInvertMatch((prev) => !prev)}
+            >
+              {invertMatch ? '取消反转筛选' : '反转当前筛选'}
+            </button>
             <button
               className="inline-flex items-center rounded-md border border-[#2196f3]/35 bg-white px-3 py-1.5 text-sm font-semibold text-[#1b5fa6] transition hover:border-[#2196f3] hover:bg-[#2196f3]/5"
               disabled={startingQueuePractice}

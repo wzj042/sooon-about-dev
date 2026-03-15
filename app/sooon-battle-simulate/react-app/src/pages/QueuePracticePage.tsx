@@ -20,10 +20,9 @@ import {
   advanceLastPracticeQueueProgress,
   consumePracticeQueue,
   loadLastPracticeQueueSession,
-  MIN_PRACTICE_QUEUE_ITEMS,
   saveLastPracticeQueueSession,
 } from '../services/practiceQueue'
-import { getQuestionStat, loadQuestionStatsMap, setQuestionMastered } from '../services/questionStats'
+import { setQuestionMastered } from '../services/questionStats'
 import { detachDebugSettle, attachDebugSettle } from '../store/actions/debug'
 import { useGameStore } from '../store/gameStore'
 
@@ -79,13 +78,13 @@ export function QueuePracticePage() {
   const questionShownAtRef = useRef<number | null>(null)
   const answerElapsedMsRef = useRef<number | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const initialPracticeSettingsRef = useRef(loadPracticeQueueSettings())
-  const [practiceSettings, setPracticeSettings] = useState(() => initialPracticeSettingsRef.current)
+  const [initialPracticeSettings] = useState(() => loadPracticeQueueSettings())
+  const [practiceSettings, setPracticeSettings] = useState(initialPracticeSettings)
   const [practiceDraft, setPracticeDraft] = useState(() => ({
-    optionWrapChars: String(initialPracticeSettingsRef.current.optionWrapChars),
-    titleSpacingPx: String(initialPracticeSettingsRef.current.titleSpacingPx),
-    titleWrapChars: String(initialPracticeSettingsRef.current.titleWrapChars),
-    autoMasterWithinSeconds: String(initialPracticeSettingsRef.current.autoMasterWithinSeconds),
+    optionWrapChars: String(initialPracticeSettings.optionWrapChars),
+    titleSpacingPx: String(initialPracticeSettings.titleSpacingPx),
+    titleWrapChars: String(initialPracticeSettings.titleWrapChars),
+    autoMasterWithinSeconds: String(initialPracticeSettings.autoMasterWithinSeconds),
   }))
 
   const queueTotal = Math.max(0, Math.floor(gameState.practiceQueueTotal))
@@ -158,13 +157,6 @@ export function QueuePracticePage() {
 
       if (practiceQueue.length <= 0) {
         setBootError('没有可用队列，请先在题库页按筛选结果创建刷题队列。')
-        return
-      }
-
-      const stats = loadQuestionStatsMap()
-      const nonMasteredQueueCount = practiceQueue.filter((item) => getQuestionStat(item.question, stats)?.mastered !== true).length
-      if (nonMasteredQueueCount < MIN_PRACTICE_QUEUE_ITEMS) {
-        setBootError(`当前队列未掌握题仅 ${nonMasteredQueueCount} 题，最少需要 ${MIN_PRACTICE_QUEUE_ITEMS} 题。`)
         return
       }
 
