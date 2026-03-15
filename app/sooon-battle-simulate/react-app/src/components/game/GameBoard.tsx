@@ -82,23 +82,21 @@ export function GameBoard({
         />
       ) : null}
 
-      {!isPracticeMode ? (
-        <AnimatePresence mode="wait">
-          {state.animations.rankText ? (
-            <motion.div
-              key={state.animations.rankText.timestamp}
-              animate="animate"
-              className="rank-text"
-              exit="exit"
-              id="rank-text"
-              initial="initial"
-              variants={rankTextVariants}
-            >
-              {state.animations.rankText.text}
-            </motion.div>
-          ) : null}
-        </AnimatePresence>
-      ) : null}
+      <AnimatePresence mode="wait">
+        {state.animations.rankText ? (
+          <motion.div
+            key={state.animations.rankText.timestamp}
+            animate="animate"
+            className="rank-text"
+            exit="exit"
+            id="rank-text"
+            initial="initial"
+            variants={rankTextVariants}
+          >
+            {state.animations.rankText.text}
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
 
       <QuestionSection
         correctAnswer={state.correctAnswer}

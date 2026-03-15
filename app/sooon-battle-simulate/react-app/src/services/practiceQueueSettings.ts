@@ -8,6 +8,9 @@ export interface PracticeQueueSettings {
   titleSpacingPx: number
   titleWrapChars: number
   autoMasterWithinSeconds: number
+  autoUnmasterOverSeconds: number
+  autoNextDelaySeconds: number
+  manualNextOnWrong: boolean
 }
 
 function normalizeAutoMasterSeconds(raw: unknown): number {
@@ -16,12 +19,24 @@ function normalizeAutoMasterSeconds(raw: unknown): number {
   return Math.max(0, Math.round(value))
 }
 
+function normalizeAutoNextDelaySeconds(raw: unknown): number {
+  if (raw === null || raw === undefined || raw === '') return 1
+  return normalizeAutoMasterSeconds(raw)
+}
+
+function normalizeManualNextOnWrong(raw: unknown): boolean {
+  return raw === true
+}
+
 function normalizeSettings(raw: Partial<PracticeQueueSettings> | null | undefined): PracticeQueueSettings {
   return {
     optionWrapChars: normalizeOptionWrapChars(Number(raw?.optionWrapChars)),
     titleSpacingPx: normalizeTitleSpacingPx(Number(raw?.titleSpacingPx)),
     titleWrapChars: normalizeTitleWrapChars(Number(raw?.titleWrapChars)),
     autoMasterWithinSeconds: normalizeAutoMasterSeconds(raw?.autoMasterWithinSeconds),
+    autoUnmasterOverSeconds: normalizeAutoMasterSeconds(raw?.autoUnmasterOverSeconds),
+    autoNextDelaySeconds: normalizeAutoNextDelaySeconds(raw?.autoNextDelaySeconds),
+    manualNextOnWrong: normalizeManualNextOnWrong(raw?.manualNextOnWrong),
   }
 }
 

@@ -166,6 +166,71 @@ describe('gameStore battle scenarios', () => {
     expect(useGameStore.getState().questionLoadError).toBeNull()
   })
 
+  it('holds on the current practice question until manual advance is requested after a wrong answer', async () => {
+    vi.useFakeTimers()
+    try {
+      const useGameStore = await loadStore()
+      const queue = [createQuestion('qa'), createQuestion('qb')]
+
+      useGameStore.getState().updatePracticeQueueFlowSettings({ autoNextDelayMs: 1000, manualNextOnWrong: true })
+      useGameStore.getState().setPracticeQueue(queue)
+      await useGameStore.getState().startNewGame()
+      useGameStore.getState().activateQuestion()
+
+      useGameStore.getState().selectAnswer(1)
+
+      expect(useGameStore.getState().gamePhase).toBe('question')
+      expect(useGameStore.getState().currentQuestion).toBe('q-qa')
+      expect(useGameStore.getState().playerCorrect).toBe(false)
+
+      await vi.advanceTimersByTimeAsync(1500)
+
+      expect(useGameStore.getState().gamePhase).toBe('question')
+      expect(useGameStore.getState().currentQuestion).toBe('q-qa')
+      expect(useGameStore.getState().currentRound).toBe(1)
+
+      useGameStore.getState().continuePracticeQueueAfterReview()
+      expect(useGameStore.getState().gamePhase).toBe('result')
+
+      await vi.advanceTimersByTimeAsync(139)
+      expect(useGameStore.getState().currentQuestion).toBe('q-qa')
+
+      await vi.advanceTimersByTimeAsync(1)
+      expect(useGameStore.getState().currentQuestion).toBe('q-qb')
+      expect(useGameStore.getState().currentRound).toBe(2)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('advances queue practice question after the configured auto-next delay', async () => {
+    vi.useFakeTimers()
+    try {
+      const useGameStore = await loadStore()
+      const queue = [createQuestion('qa'), createQuestion('qb')]
+
+      useGameStore.getState().updatePracticeQueueFlowSettings({ autoNextDelayMs: 1200, manualNextOnWrong: false })
+      useGameStore.getState().setPracticeQueue(queue)
+      await useGameStore.getState().startNewGame()
+      useGameStore.getState().activateQuestion()
+
+      useGameStore.getState().selectAnswer(0)
+
+      expect(useGameStore.getState().gamePhase).toBe('result')
+      expect(useGameStore.getState().currentQuestion).toBe('q-qa')
+
+      await vi.advanceTimersByTimeAsync(1199)
+      expect(useGameStore.getState().currentQuestion).toBe('q-qa')
+      expect(useGameStore.getState().currentRound).toBe(1)
+
+      await vi.advanceTimersByTimeAsync(1)
+      expect(useGameStore.getState().currentQuestion).toBe('q-qb')
+      expect(useGameStore.getState().currentRound).toBe(2)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('keeps default rounds in per_round_random mode even when candidate pool is small', async () => {
     const useGameStore = await loadStore()
     mockPoolRef.current = [createQuestion('solo')]

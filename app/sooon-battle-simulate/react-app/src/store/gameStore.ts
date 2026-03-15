@@ -14,6 +14,9 @@ const TIMER_TICK_MS = 80
 const DEFAULT_MAX_SCORE = 900
 const DEFAULT_QUESTION_SELECTION_STRATEGY: QuestionSelectionStrategy = 'all_questions'
 const DEFAULT_QUESTION_RANDOM_MODE: QuestionRandomMode = 'shuffled_cycle'
+const DEFAULT_PRACTICE_QUEUE_AUTO_NEXT_DELAY_MS = 1000
+const DEFAULT_PRACTICE_QUEUE_MANUAL_NEXT_ON_WRONG = false
+const PRACTICE_QUEUE_MANUAL_ADVANCE_DELAY_MS = 140
 const FAST_RESULT_DELAY_MS = 280
 const FAST_WRONG_RESULT_DELAY_MS = 650
 
@@ -99,6 +102,8 @@ export const useGameStore = create<GameStore>((set, get) => {
   let practiceQueueQuestions: QuestionItem[] = []
   let practiceQueueCursor = 0
   let practiceQueueProgress = 0
+  let practiceQueueAutoNextDelayMs = DEFAULT_PRACTICE_QUEUE_AUTO_NEXT_DELAY_MS
+  let practiceQueueManualNextOnWrong = DEFAULT_PRACTICE_QUEUE_MANUAL_NEXT_ON_WRONG
 
   let timerIntervalId: number | null = null
   let opponentTimeoutId: number | null = null
@@ -229,7 +234,7 @@ export const useGameStore = create<GameStore>((set, get) => {
     get().endGame()
   }
 
-  const showResultsInternal = () => {
+  const showResultsInternal = (forcePracticeAdvance = false) => {
     const state = get()
     if (state.gamePhase !== 'question') return
 
@@ -272,6 +277,16 @@ export const useGameStore = create<GameStore>((set, get) => {
     }))
 
     timers.clearTrackedTimeout(resultTimeoutId)
+    if (state.practiceQueueMode) {
+      if (state.playerCorrect === false && practiceQueueManualNextOnWrong && !forcePracticeAdvance) {
+        resultTimeoutId = null
+        return
+      }
+      resultTimeoutId = timers.setTrackedTimeout(() => {
+        maybeGoNext()
+      }, forcePracticeAdvance ? PRACTICE_QUEUE_MANUAL_ADVANCE_DELAY_MS : Math.max(0, practiceQueueAutoNextDelayMs))
+      return
+    }
     resultTimeoutId = timers.setTrackedTimeout(() => {
       maybeGoNext()
     }, state.playerCorrect === false ? FAST_WRONG_RESULT_DELAY_MS : FAST_RESULT_DELAY_MS)
@@ -325,9 +340,11 @@ export const useGameStore = create<GameStore>((set, get) => {
       stopTimer()
       clearOpponentTimeout()
       timers.clearTrackedTimeout(resultTimeoutId)
-      resultTimeoutId = timers.setTrackedTimeout(() => {
-        showResultsInternal()
-      }, resultDelayMs)
+      resultTimeoutId = null
+      if (state.playerCorrect === false && practiceQueueManualNextOnWrong) {
+        return
+      }
+      showResultsInternal()
       return
     }
 
@@ -640,6 +657,28 @@ export const useGameStore = create<GameStore>((set, get) => {
       })
     },
 
+    updatePracticeQueueFlowSettings: (params) => {
+      if (typeof params.autoNextDelayMs === 'number' && Number.isFinite(params.autoNextDelayMs)) {
+        practiceQueueAutoNextDelayMs = Math.max(0, Math.round(params.autoNextDelayMs))
+      }
+      if (typeof params.manualNextOnWrong === 'boolean') {
+        practiceQueueManualNextOnWrong = params.manualNextOnWrong
+      }
+    },
+
+    continuePracticeQueueAfterReview: () => {
+      const state = get()
+      if (!state.practiceQueueMode) return
+      if (state.gamePhase !== 'question') return
+      if (state.playerSelection === null) return
+      showResultsInternal(true)
+    },
+
+    showRankText: (text) => {
+      if (typeof text !== 'string' || text.trim().length === 0) return
+      showRoundText(text.trim())
+    },
+
     setPracticeQueue: (questions, practicedCount = 0) => {
       practiceQueueQuestions = questions
       practiceQueueCursor = 0
@@ -693,6 +732,8 @@ export const useGameStore = create<GameStore>((set, get) => {
       practiceQueueQuestions = []
       practiceQueueCursor = 0
       practiceQueueProgress = 0
+      practiceQueueAutoNextDelayMs = DEFAULT_PRACTICE_QUEUE_AUTO_NEXT_DELAY_MS
+      practiceQueueManualNextOnWrong = DEFAULT_PRACTICE_QUEUE_MANUAL_NEXT_ON_WRONG
       selectedQuestions = []
       questionSelectionPool = []
     },

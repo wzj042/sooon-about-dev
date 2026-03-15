@@ -117,6 +117,9 @@ export interface GameActions {
   updateQuestionSelectionStrategy(strategy: QuestionSelectionStrategy): void
   updateQuestionSelectionCommonSenseType(type: string): void
   updateQuestionRandomMode(mode: QuestionRandomMode): void
+  updatePracticeQueueFlowSettings(params: { autoNextDelayMs?: number; manualNextOnWrong?: boolean }): void
+  continuePracticeQueueAfterReview(): void
+  showRankText(text: string): void
   setPracticeQueue(questions: QuestionItem[], practicedCount?: number): void
   reset(): void
   destroy(): void
