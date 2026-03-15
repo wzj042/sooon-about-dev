@@ -210,13 +210,18 @@ export function getQuestionStatsSummary(map: QuestionStatsMap): QuestionStatsSum
   }
 }
 
+function normalizeQuestionType(type?: string): string {
+  return typeof type === 'string' ? type.trim() : ''
+}
+
 export function isEthicsType(type?: string): boolean {
-  if (typeof type !== 'string') return false
-  return type.trim().toLowerCase() === 'sooon_ai'
+  const normalized = normalizeQuestionType(type).toLowerCase()
+  return normalized === 'sooon_ai' || normalized === 'ethics' || normalized === '伦理'
 }
 
 export function isCommonSenseType(type?: string): boolean {
-  if (typeof type !== 'string') return false
-  return type.trim().toLowerCase() === 'common_sense'
+  const normalized = normalizeQuestionType(type)
+  if (normalized.length === 0) return false
+  if (normalized === '素问') return false
+  return !isEthicsType(normalized)
 }
-
