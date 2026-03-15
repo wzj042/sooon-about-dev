@@ -216,7 +216,7 @@ function normalizeQuestionType(type?: string): string {
 
 export function isEthicsType(type?: string): boolean {
   const normalized = normalizeQuestionType(type).toLowerCase()
-  return normalized === 'sooon_ai' || normalized === 'ethics' || normalized === '伦理'
+  return normalized === 'sooon_ai' || normalized === 'ethics' || normalized === '素问' || normalized === '伦理'
 }
 
 export function isCommonSenseType(type?: string): boolean {

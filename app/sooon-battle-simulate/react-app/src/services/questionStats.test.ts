@@ -7,6 +7,7 @@ describe('questionStats type matching', () => {
     expect(isEthicsType('sooon_ai')).toBe(true)
     expect(isEthicsType('  SOOON_AI  ')).toBe(true)
     expect(isEthicsType('ethics')).toBe(true)
+    expect(isEthicsType('素问')).toBe(true)
     expect(isEthicsType('伦理')).toBe(true)
   })
 
