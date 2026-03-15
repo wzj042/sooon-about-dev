@@ -30,6 +30,7 @@ export const LEGACY_KEYS = {
   questionSelectionCommonSenseType: 'questionSelectionCommonSenseType',
   questionRandomMode: 'questionRandomMode',
   autoMasterTimeLeft: 'autoMasterTimeLeft',
+  autoUnmasterOverSeconds: 'autoUnmasterOverSeconds',
 } as const
 
 export interface LegacyConfigSnapshot {
@@ -49,6 +50,7 @@ export interface LegacyConfigSnapshot {
   questionSelectionCommonSenseType: string
   questionRandomMode: QuestionRandomMode
   autoMasterTimeLeft: number
+  autoUnmasterOverSeconds: number
 }
 
 const DEFAULT_QUESTION_SELECTION_STRATEGY: QuestionSelectionStrategy = 'all_questions'
@@ -149,6 +151,7 @@ export function loadLegacyConfig(): LegacyConfigSnapshot {
     questionSelectionCommonSenseType: getString(LEGACY_KEYS.questionSelectionCommonSenseType, '').trim(),
     questionRandomMode: normalizedQuestionSettings.questionRandomMode,
     autoMasterTimeLeft: Math.max(0, Math.round(getNumber(LEGACY_KEYS.autoMasterTimeLeft, 0))),
+    autoUnmasterOverSeconds: Math.max(0, Math.round(getNumber(LEGACY_KEYS.autoUnmasterOverSeconds, 0))),
   }
 }
 
@@ -204,4 +207,9 @@ export function saveLegacyQuestionRandomMode(mode: QuestionRandomMode): void {
 export function saveLegacyAutoMasterTimeLeft(value: number): void {
   const normalized = Number.isFinite(value) ? Math.max(0, Math.round(value)) : 0
   setValue(LEGACY_KEYS.autoMasterTimeLeft, normalized)
+}
+
+export function saveLegacyAutoUnmasterOverSeconds(value: number): void {
+  const normalized = Number.isFinite(value) ? Math.max(0, Math.round(value)) : 0
+  setValue(LEGACY_KEYS.autoUnmasterOverSeconds, normalized)
 }

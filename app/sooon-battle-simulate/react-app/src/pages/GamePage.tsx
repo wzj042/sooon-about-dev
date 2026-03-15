@@ -24,6 +24,7 @@ import {
   saveLegacyAIConfig,
   saveLegacyAutoSkipEndScreen,
   saveLegacyAutoMasterTimeLeft,
+  saveLegacyAutoUnmasterOverSeconds,
   saveLegacyAvatar,
   saveLegacyAvatarFixed,
   saveLegacyDisplayConfig,
@@ -58,6 +59,7 @@ interface SettingsState {
   questionSelectionCommonSenseType: string
   questionRandomMode: QuestionRandomMode
   autoMasterTimeLeft: number
+  autoUnmasterOverSeconds: number
 }
 
 function normalizeAvatarForSave(avatar: AvatarData, fallbackAvatarSrc: string): AvatarData {
@@ -104,6 +106,7 @@ export function GamePage() {
   const updateQuestionSelectionStrategy = useGameStore((state) => state.updateQuestionSelectionStrategy)
   const updateQuestionSelectionCommonSenseType = useGameStore((state) => state.updateQuestionSelectionCommonSenseType)
   const updateQuestionRandomMode = useGameStore((state) => state.updateQuestionRandomMode)
+  const showRankText = useGameStore((state) => state.showRankText)
 
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [avatarOpen, setAvatarOpen] = useState(false)
@@ -127,8 +130,10 @@ export function GamePage() {
     questionSelectionCommonSenseType: '',
     questionRandomMode: 'shuffled_cycle',
     autoMasterTimeLeft: 0,
+    autoUnmasterOverSeconds: 0,
   })
   const autoMasterRoundRef = useRef<number | null>(null)
+  const questionWasMasteredRef = useRef(false)
 
   const normalizedSettings = useMemo(
     () =>
@@ -175,6 +180,7 @@ export function GamePage() {
         questionSelectionCommonSenseType: legacy.questionSelectionCommonSenseType,
         questionRandomMode: legacy.questionRandomMode,
         autoMasterTimeLeft: legacy.autoMasterTimeLeft,
+        autoUnmasterOverSeconds: legacy.autoUnmasterOverSeconds,
       })
 
       store.updateAIConfig({
@@ -221,16 +227,37 @@ export function GamePage() {
   }, [gameState.gamePhase])
 
   useEffect(() => {
+    if (!gameState.currentQuestion) {
+      questionWasMasteredRef.current = false
+      return
+    }
+    const statsMap = loadQuestionStatsMap()
+    questionWasMasteredRef.current = statsMap[gameState.currentQuestion]?.mastered === true
+  }, [gameState.currentQuestion])
+
+  useEffect(() => {
     if (gameState.gamePhase !== 'result') return
     if (autoMasterRoundRef.current === gameState.currentRound) return
-    if (settings.autoMasterTimeLeft <= 0) return
     if (!gameState.currentQuestion) return
+    const elapsedMs = Math.max(0, gameState.currentMaxTime - gameState.timeLeft) * 80
+    if (questionWasMasteredRef.current) {
+      const shouldUnmasterByWrong = gameState.playerCorrect === false
+      const shouldUnmasterBySlow = settings.autoUnmasterOverSeconds > 0 && elapsedMs > settings.autoUnmasterOverSeconds * 1000
+      if (shouldUnmasterByWrong || shouldUnmasterBySlow) {
+        setQuestionMastered(gameState.currentQuestion, false)
+        showRankText('已取消掌握')
+        autoMasterRoundRef.current = gameState.currentRound
+        return
+      }
+    }
+    if (settings.autoMasterTimeLeft <= 0) return
     if (gameState.playerCorrect !== true) return
     const isFinalRound = gameState.totalRounds > 0 && gameState.currentRound === gameState.totalRounds
     const effectiveTimeLeft = isFinalRound ? Math.floor(gameState.timeLeft / 2) : gameState.timeLeft
     if (effectiveTimeLeft < settings.autoMasterTimeLeft) return
 
     setQuestionMastered(gameState.currentQuestion, true)
+    showRankText('已标注掌握')
     autoMasterRoundRef.current = gameState.currentRound
   }, [
     gameState.currentQuestion,
@@ -238,8 +265,11 @@ export function GamePage() {
     gameState.gamePhase,
     gameState.playerCorrect,
     gameState.totalRounds,
+    gameState.currentMaxTime,
     gameState.timeLeft,
     settings.autoMasterTimeLeft,
+    settings.autoUnmasterOverSeconds,
+    showRankText,
   ])
 
   useEffect(() => {
@@ -287,6 +317,7 @@ export function GamePage() {
     questionSelectionCommonSenseType: string
     questionRandomMode: QuestionRandomMode
     autoMasterTimeLeft: number
+    autoUnmasterOverSeconds: number
   }) => {
     setSettings({
       accuracyPercent: params.accuracyPercent,
@@ -303,6 +334,7 @@ export function GamePage() {
       questionSelectionCommonSenseType: params.questionSelectionCommonSenseType,
       questionRandomMode: params.questionRandomMode,
       autoMasterTimeLeft: params.autoMasterTimeLeft,
+      autoUnmasterOverSeconds: params.autoUnmasterOverSeconds,
     })
 
     updateAIConfig({
@@ -333,6 +365,7 @@ export function GamePage() {
     saveLegacyQuestionSelectionCommonSenseType(params.questionSelectionCommonSenseType)
     saveLegacyQuestionRandomMode(params.questionRandomMode)
     saveLegacyAutoMasterTimeLeft(params.autoMasterTimeLeft)
+    saveLegacyAutoUnmasterOverSeconds(params.autoUnmasterOverSeconds)
 
     if (params.avatarFixed) {
       saveLegacyAvatar('opponent', {
@@ -442,6 +475,7 @@ export function GamePage() {
           questionSelectionCommonSenseType: settings.questionSelectionCommonSenseType,
           questionRandomMode: settings.questionRandomMode,
           autoMasterTimeLeft: settings.autoMasterTimeLeft,
+          autoUnmasterOverSeconds: settings.autoUnmasterOverSeconds,
         }}
         commonSenseSubtypeCounts={commonSenseSubtypeCounts}
         questionSelectionCounts={questionSelectionCounts}

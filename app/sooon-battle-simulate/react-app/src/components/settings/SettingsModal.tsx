@@ -36,6 +36,7 @@ interface SettingsModalProps {
     questionSelectionCommonSenseType: string
     questionRandomMode: QuestionRandomMode
     autoMasterTimeLeft: number
+    autoUnmasterOverSeconds: number
   }
   commonSenseSubtypeCounts: CommonSenseSubtypeCounts
   questionSelectionCounts: QuestionSelectionCounts
@@ -60,6 +61,7 @@ interface SettingsModalProps {
     questionSelectionCommonSenseType: string
     questionRandomMode: QuestionRandomMode
     autoMasterTimeLeft: number
+    autoUnmasterOverSeconds: number
   }) => void
   disableQuestionSelectionStrategy?: boolean
   onClose: () => void
@@ -80,6 +82,7 @@ interface DraftState {
   questionSelectionCommonSenseType: string
   questionRandomMode: QuestionRandomMode
   autoMasterTimeLeft: string
+  autoUnmasterOverSeconds: string
 }
 
 function renderAvatar(html: string, fallbackSrc = DEFAULT_AVATAR_SRC) {
@@ -137,6 +140,7 @@ export function SettingsModal({
     questionSelectionCommonSenseType,
     questionRandomMode,
     autoMasterTimeLeft,
+    autoUnmasterOverSeconds,
   } = values
 
   const [draft, setDraft] = useState<DraftState>({
@@ -154,6 +158,7 @@ export function SettingsModal({
     questionSelectionCommonSenseType: '',
     questionRandomMode: 'shuffled_cycle',
     autoMasterTimeLeft: '0',
+    autoUnmasterOverSeconds: '0',
   })
 
   useEffect(() => {
@@ -173,6 +178,7 @@ export function SettingsModal({
       questionSelectionCommonSenseType,
       questionRandomMode,
       autoMasterTimeLeft: String(autoMasterTimeLeft),
+      autoUnmasterOverSeconds: String(autoUnmasterOverSeconds),
     })
   }, [
     accuracyPercent,
@@ -190,6 +196,7 @@ export function SettingsModal({
     titleSpacingPx,
     titleWrapChars,
     autoMasterTimeLeft,
+    autoUnmasterOverSeconds,
   ])
 
   useEffect(() => {
@@ -213,7 +220,9 @@ export function SettingsModal({
     const nextTitleSpacingPx = Number.parseInt(draft.titleSpacingPx, 10)
     const nextTitleWrapChars = Number.parseInt(draft.titleWrapChars, 10)
     const nextAutoMasterTimeLeft = Number.parseInt(draft.autoMasterTimeLeft, 10)
+    const nextAutoUnmasterOverSeconds = Number.parseInt(draft.autoUnmasterOverSeconds, 10)
     const normalizedAutoMasterTimeLeft = Number.isFinite(nextAutoMasterTimeLeft) ? Math.max(0, nextAutoMasterTimeLeft) : 0
+    const normalizedAutoUnmasterOverSeconds = Number.isFinite(nextAutoUnmasterOverSeconds) ? Math.max(0, nextAutoUnmasterOverSeconds) : 0
 
     const normalizedSettings = normalizeSettings({
       accuracyPercent: nextAccuracyPercent,
@@ -226,10 +235,12 @@ export function SettingsModal({
     return {
       ...normalizedSettings,
       autoMasterTimeLeft: normalizedAutoMasterTimeLeft,
+      autoUnmasterOverSeconds: normalizedAutoUnmasterOverSeconds,
     }
   }, [
     draft.accuracy,
     draft.autoMasterTimeLeft,
+    draft.autoUnmasterOverSeconds,
     draft.max,
     draft.min,
     draft.optionWrapChars,
@@ -256,6 +267,7 @@ export function SettingsModal({
       questionSelectionCommonSenseType: draft.questionSelectionCommonSenseType,
       questionRandomMode: draft.questionRandomMode,
       autoMasterTimeLeft: normalized.autoMasterTimeLeft,
+      autoUnmasterOverSeconds: normalized.autoUnmasterOverSeconds,
     })
 
     setDraft((prev) => ({
@@ -272,6 +284,7 @@ export function SettingsModal({
       questionSelectionCommonSenseType: prev.questionSelectionCommonSenseType,
       questionRandomMode: prev.questionRandomMode,
       autoMasterTimeLeft: String(normalized.autoMasterTimeLeft),
+      autoUnmasterOverSeconds: String(normalized.autoUnmasterOverSeconds),
     }))
 
     if (shouldClose) {
@@ -623,6 +636,38 @@ export function SettingsModal({
             }}
           />
           <div className="setting-description">倒计时大于等于该数值且答对时，自动标注掌握</div>
+        </div>
+
+        <div className="setting-group">
+          <label className="setting-label" htmlFor="auto-unmaster-over-seconds">
+            自动取消掌握阈值（秒）
+          </label>
+          <input
+            className="setting-input"
+            id="auto-unmaster-over-seconds"
+            inputMode="numeric"
+            max="999"
+            min="0"
+            pattern="[0-9]*"
+            placeholder="留空表示关闭"
+            step="1"
+            type="text"
+            value={draft.autoUnmasterOverSeconds}
+            onBlur={() => commit(false)}
+            onChange={(event) => {
+              setDraft((prev) => ({
+                ...prev,
+                autoUnmasterOverSeconds: sanitizeDigitsInput(event.target.value),
+              }))
+            }}
+            onKeyDown={(event) => {
+              onlyNumericKeyboard(event)
+              if (event.key === 'Enter') {
+                commit(false)
+              }
+            }}
+          />
+          <div className="setting-description">本轮开始前已掌握的题，作答超过指定秒数后自动取消掌握</div>
         </div>
 
         <div className="setting-group">
