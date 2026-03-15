@@ -1,13 +1,14 @@
 ﻿export type GamePhase = 'ready' | 'question' | 'waiting' | 'result' | 'ended'
 export type QuestionSelectionStrategy =
-  | 'repeatable_random'
-  | 'shuffled_traversal_recent_first'
+  | 'all_questions'
   | 'unseen_first'
   | 'mistake_focused'
   | 'slow_thinking_focused'
   | 'common_sense_only'
   | 'ethics_only'
+  | 'unmastered_only'
   | 'mastered_only'
+export type QuestionRandomMode = 'shuffled_cycle' | 'per_round_random'
 
 export interface OpponentAI {
   accuracy: number
@@ -92,6 +93,7 @@ export interface GameState {
   aiSpeedRange: [number, number]
   aiAccuracy: number
   questionSelectionStrategy: QuestionSelectionStrategy
+  questionRandomMode: QuestionRandomMode
   practiceQueueMode: boolean
   practiceQueueTotal: number
   practiceQueuePracticed: number
@@ -112,6 +114,7 @@ export interface GameActions {
   setAvatarFixed(fixed: boolean): void
   updateAIConfig(params: { accuracy?: number; speedMsRange?: [number, number] }): void
   updateQuestionSelectionStrategy(strategy: QuestionSelectionStrategy): void
+  updateQuestionRandomMode(mode: QuestionRandomMode): void
   setPracticeQueue(questions: QuestionItem[], practicedCount?: number): void
   reset(): void
   destroy(): void

@@ -1,5 +1,5 @@
 import type { AvatarData } from '../domain/types'
-import type { QuestionSelectionStrategy } from '../domain/types'
+import type { QuestionRandomMode, QuestionSelectionStrategy } from '../domain/types'
 import {
   DEFAULT_OPPONENT_ID,
   DEFAULT_OPTION_WRAP_CHARS,
@@ -27,6 +27,7 @@ export const LEGACY_KEYS = {
   titleSpacingPx: 'titleSpacingPx',
   titleWrapChars: 'titleWrapChars',
   questionSelectionStrategy: 'questionSelectionStrategy',
+  questionRandomMode: 'questionRandomMode',
   autoMasterTimeLeft: 'autoMasterTimeLeft',
 } as const
 
@@ -44,21 +45,53 @@ export interface LegacyConfigSnapshot {
   titleSpacingPx: number
   titleWrapChars: number
   questionSelectionStrategy: QuestionSelectionStrategy
+  questionRandomMode: QuestionRandomMode
   autoMasterTimeLeft: number
 }
 
-const DEFAULT_QUESTION_SELECTION_STRATEGY: QuestionSelectionStrategy = 'shuffled_traversal_recent_first'
+const DEFAULT_QUESTION_SELECTION_STRATEGY: QuestionSelectionStrategy = 'all_questions'
+const DEFAULT_QUESTION_RANDOM_MODE: QuestionRandomMode = 'shuffled_cycle'
 
 function normalizeQuestionSelectionStrategy(raw: string): QuestionSelectionStrategy {
-  if (raw === 'repeatable_random') return raw
-  if (raw === 'shuffled_traversal_recent_first') return raw
+  if (raw === 'all_questions') return raw
   if (raw === 'unseen_first') return raw
   if (raw === 'mistake_focused') return raw
   if (raw === 'slow_thinking_focused') return raw
   if (raw === 'common_sense_only') return raw
   if (raw === 'ethics_only') return raw
+  if (raw === 'unmastered_only') return raw
   if (raw === 'mastered_only') return raw
   return DEFAULT_QUESTION_SELECTION_STRATEGY
+}
+
+function normalizeQuestionRandomMode(raw: string): QuestionRandomMode {
+  if (raw === 'shuffled_cycle') return raw
+  if (raw === 'per_round_random') return raw
+  return DEFAULT_QUESTION_RANDOM_MODE
+}
+
+function normalizeLegacyQuestionSettings(rawStrategy: string, rawRandomMode: string): {
+  questionSelectionStrategy: QuestionSelectionStrategy
+  questionRandomMode: QuestionRandomMode
+} {
+  if (rawStrategy === 'repeatable_random') {
+    return {
+      questionSelectionStrategy: 'all_questions',
+      questionRandomMode: 'per_round_random',
+    }
+  }
+
+  if (rawStrategy === 'shuffled_traversal_recent_first') {
+    return {
+      questionSelectionStrategy: 'all_questions',
+      questionRandomMode: 'shuffled_cycle',
+    }
+  }
+
+  return {
+    questionSelectionStrategy: normalizeQuestionSelectionStrategy(rawStrategy),
+    questionRandomMode: normalizeQuestionRandomMode(rawRandomMode),
+  }
 }
 
 function normalizeAvatarPayload(value: unknown): AvatarData | null {
@@ -92,6 +125,10 @@ function normalizeLegacyAccuracyPercent(raw: number): number {
 
 export function loadLegacyConfig(): LegacyConfigSnapshot {
   const aiAccuracyStored = getNumber(LEGACY_KEYS.aiAccuracy, 60)
+  const normalizedQuestionSettings = normalizeLegacyQuestionSettings(
+    getString(LEGACY_KEYS.questionSelectionStrategy, DEFAULT_QUESTION_SELECTION_STRATEGY),
+    getString(LEGACY_KEYS.questionRandomMode, DEFAULT_QUESTION_RANDOM_MODE),
+  )
 
   return {
     aiSpeedMin: getNumber(LEGACY_KEYS.aiSpeedMin, 1280),
@@ -106,9 +143,8 @@ export function loadLegacyConfig(): LegacyConfigSnapshot {
     optionWrapChars: normalizeOptionWrapChars(getNumber(LEGACY_KEYS.optionWrapChars, DEFAULT_OPTION_WRAP_CHARS)),
     titleSpacingPx: normalizeTitleSpacingPx(getNumber(LEGACY_KEYS.titleSpacingPx, DEFAULT_TITLE_SPACING_PX)),
     titleWrapChars: normalizeTitleWrapChars(getNumber(LEGACY_KEYS.titleWrapChars, DEFAULT_TITLE_WRAP_CHARS)),
-    questionSelectionStrategy: normalizeQuestionSelectionStrategy(
-      getString(LEGACY_KEYS.questionSelectionStrategy, DEFAULT_QUESTION_SELECTION_STRATEGY),
-    ),
+    questionSelectionStrategy: normalizedQuestionSettings.questionSelectionStrategy,
+    questionRandomMode: normalizedQuestionSettings.questionRandomMode,
     autoMasterTimeLeft: Math.max(0, Math.round(getNumber(LEGACY_KEYS.autoMasterTimeLeft, 0))),
   }
 }
@@ -152,6 +188,10 @@ export function saveLegacyDisplayConfig(config: {
 
 export function saveLegacyQuestionSelectionStrategy(strategy: QuestionSelectionStrategy): void {
   setValue(LEGACY_KEYS.questionSelectionStrategy, normalizeQuestionSelectionStrategy(strategy))
+}
+
+export function saveLegacyQuestionRandomMode(mode: QuestionRandomMode): void {
+  setValue(LEGACY_KEYS.questionRandomMode, normalizeQuestionRandomMode(mode))
 }
 
 export function saveLegacyAutoMasterTimeLeft(value: number): void {

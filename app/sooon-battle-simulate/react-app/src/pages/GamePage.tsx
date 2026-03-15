@@ -9,7 +9,7 @@ import { AppLayout } from '../components/layout/AppLayout'
 import { SettingsModal } from '../components/settings/SettingsModal'
 import { DEFAULT_AVATAR_SRC } from '../domain/avatar'
 import type { AvatarData } from '../domain/types'
-import type { QuestionSelectionStrategy } from '../domain/types'
+import type { QuestionRandomMode, QuestionSelectionStrategy } from '../domain/types'
 import {
   DEFAULT_OPPONENT_ID,
   DEFAULT_OPTION_WRAP_CHARS,
@@ -27,9 +27,12 @@ import {
   saveLegacyAvatar,
   saveLegacyAvatarFixed,
   saveLegacyDisplayConfig,
+  saveLegacyQuestionRandomMode,
   saveLegacyQuestionSelectionStrategy,
 } from '../services/legacyStorageCompat'
-import { setQuestionMastered } from '../services/questionStats'
+import { loadQuestionBank } from '../services/questionBank'
+import { buildQuestionSelectionCounts, DEFAULT_QUESTION_SELECTION_COUNTS, type QuestionSelectionCounts } from '../services/questionSelection'
+import { loadQuestionStatsMap, setQuestionMastered, subscribeQuestionStats } from '../services/questionStats'
 import { detachDebugSettle, attachDebugSettle } from '../store/actions/debug'
 import { useGameStore } from '../store/gameStore'
 
@@ -45,6 +48,7 @@ interface SettingsState {
   titleSpacingPx: number
   titleWrapChars: number
   questionSelectionStrategy: QuestionSelectionStrategy
+  questionRandomMode: QuestionRandomMode
   autoMasterTimeLeft: number
 }
 
@@ -90,11 +94,14 @@ export function GamePage() {
   const updateAIConfig = useGameStore((state) => state.updateAIConfig)
   const setAvatarFixed = useGameStore((state) => state.setAvatarFixed)
   const updateQuestionSelectionStrategy = useGameStore((state) => state.updateQuestionSelectionStrategy)
+  const updateQuestionRandomMode = useGameStore((state) => state.updateQuestionRandomMode)
 
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [avatarOpen, setAvatarOpen] = useState(false)
   const [avatarContext, setAvatarContext] = useState<'player' | 'opponent'>('player')
   const [playerAvatarHtml, setPlayerAvatarHtml] = useState(DEFAULT_AVATAR_SRC)
+  const [questionSelectionCounts, setQuestionSelectionCounts] = useState<QuestionSelectionCounts>(DEFAULT_QUESTION_SELECTION_COUNTS)
+  const [questionSelectionCountsLoading, setQuestionSelectionCountsLoading] = useState(true)
   const [settings, setSettings] = useState<SettingsState>({
     accuracyPercent: 60,
     minSpeedMs: 1280,
@@ -106,7 +113,8 @@ export function GamePage() {
     optionWrapChars: DEFAULT_OPTION_WRAP_CHARS,
     titleSpacingPx: DEFAULT_TITLE_SPACING_PX,
     titleWrapChars: DEFAULT_TITLE_WRAP_CHARS,
-    questionSelectionStrategy: 'shuffled_traversal_recent_first',
+    questionSelectionStrategy: 'all_questions',
+    questionRandomMode: 'shuffled_cycle',
     autoMasterTimeLeft: 0,
   })
   const autoMasterRoundRef = useRef<number | null>(null)
@@ -153,6 +161,7 @@ export function GamePage() {
         titleSpacingPx: normalized.titleSpacingPx,
         titleWrapChars: normalized.titleWrapChars,
         questionSelectionStrategy: legacy.questionSelectionStrategy,
+        questionRandomMode: legacy.questionRandomMode,
         autoMasterTimeLeft: legacy.autoMasterTimeLeft,
       })
 
@@ -163,6 +172,7 @@ export function GamePage() {
 
       store.setAvatarFixed(legacy.avatarFixed)
       store.updateQuestionSelectionStrategy(legacy.questionSelectionStrategy)
+      store.updateQuestionRandomMode(legacy.questionRandomMode)
 
       if (legacy.playerAvatarData?.svg) {
         setPlayerAvatarHtml(legacy.playerAvatarData.svg)
@@ -219,6 +229,33 @@ export function GamePage() {
     settings.autoMasterTimeLeft,
   ])
 
+  useEffect(() => {
+    let cancelled = false
+
+    const refreshCounts = async () => {
+      try {
+        const bank = await loadQuestionBank()
+        if (cancelled) return
+        const statsMap = loadQuestionStatsMap()
+        setQuestionSelectionCounts(buildQuestionSelectionCounts(bank, statsMap))
+      } finally {
+        if (!cancelled) {
+          setQuestionSelectionCountsLoading(false)
+        }
+      }
+    }
+
+    void refreshCounts()
+    const unsubscribe = subscribeQuestionStats(() => {
+      void refreshCounts()
+    })
+
+    return () => {
+      cancelled = true
+      unsubscribe()
+    }
+  }, [])
+
   const applySettings = (params: {
     accuracyPercent: number
     minSpeedMs: number
@@ -233,6 +270,7 @@ export function GamePage() {
     titleSpacingPx: number
     titleWrapChars: number
     questionSelectionStrategy: QuestionSelectionStrategy
+    questionRandomMode: QuestionRandomMode
     autoMasterTimeLeft: number
   }) => {
     setSettings({
@@ -247,6 +285,7 @@ export function GamePage() {
       titleSpacingPx: params.titleSpacingPx,
       titleWrapChars: params.titleWrapChars,
       questionSelectionStrategy: params.questionSelectionStrategy,
+      questionRandomMode: params.questionRandomMode,
       autoMasterTimeLeft: params.autoMasterTimeLeft,
     })
 
@@ -257,6 +296,7 @@ export function GamePage() {
 
     setAvatarFixed(params.avatarFixed)
     updateQuestionSelectionStrategy(params.questionSelectionStrategy)
+    updateQuestionRandomMode(params.questionRandomMode)
 
     saveLegacyAIConfig({
       accuracyPercent: params.accuracyPercent,
@@ -273,6 +313,7 @@ export function GamePage() {
       titleWrapChars: params.titleWrapChars,
     })
     saveLegacyQuestionSelectionStrategy(params.questionSelectionStrategy)
+    saveLegacyQuestionRandomMode(params.questionRandomMode)
     saveLegacyAutoMasterTimeLeft(params.autoMasterTimeLeft)
 
     if (params.avatarFixed) {
@@ -380,8 +421,11 @@ export function GamePage() {
           titleSpacingPx: normalizedSettings.titleSpacingPx,
           titleWrapChars: normalizedSettings.titleWrapChars,
           questionSelectionStrategy: settings.questionSelectionStrategy,
+          questionRandomMode: settings.questionRandomMode,
           autoMasterTimeLeft: settings.autoMasterTimeLeft,
         }}
+        questionSelectionCounts={questionSelectionCounts}
+        questionSelectionCountsLoading={questionSelectionCountsLoading}
         onApply={applySettings}
         disableQuestionSelectionStrategy={gameState.practiceQueueMode}
         onClose={() => setSettingsOpen(false)}

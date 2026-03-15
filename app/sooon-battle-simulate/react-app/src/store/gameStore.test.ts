@@ -20,7 +20,8 @@ vi.mock('../services/avatarService', () => ({
 }))
 
 vi.mock('../services/questionBank', () => ({
-  loadQuestionPool: vi.fn(async () => mockPoolRef.current),
+  loadQuestionBank: vi.fn(async () => mockPoolRef.current),
+  shuffle: vi.fn((items: QuestionItem[]) => items),
   buildRoundQuestion: vi.fn((question: QuestionItem) => ({
     question: question.question,
     options: question.options,
@@ -89,29 +90,72 @@ describe('gameStore battle scenarios', () => {
     useGameStore.getState().updateQuestionSelectionStrategy('common_sense_only')
     await useGameStore.getState().startNewGame()
 
-    expect(useGameStore.getState().questionLoadError).toContain('No questions available for current strategy')
+    expect(useGameStore.getState().questionLoadError).toContain('当前答题策略下没有可用题目')
     expect(useGameStore.getState().gamePhase).toBe('ready')
     expect(useGameStore.getState().currentQuestion).toBeNull()
   })
 
-  it('does not mix in non-queue questions when queue has too few non-mastered items', async () => {
+  it('keeps mastered questions in queue practice instead of filtering them out', async () => {
     const useGameStore = await loadStore()
     const queue = [createQuestion('qa'), createQuestion('qb'), createQuestion('qc'), createQuestion('qd'), createQuestion('qe')]
-    mockPoolRef.current = [createQuestion('pool-1', 'common_sense'), createQuestion('pool-2', 'common_sense')]
     mockStatsRef.current = {
       'q-qa': { mastered: true },
       'q-qb': { mastered: true },
       'q-qc': { mastered: true },
       'q-qd': { mastered: true },
-      'q-qe': { mastered: false },
+      'q-qe': { mastered: true },
     }
 
     useGameStore.getState().setPracticeQueue(queue)
     await useGameStore.getState().startNewGame()
 
-    expect(useGameStore.getState().currentQuestion).toBe('q-qe')
+    expect(useGameStore.getState().currentQuestion).toBe('q-qa')
+    expect(useGameStore.getState().totalRounds).toBe(5)
+    expect(useGameStore.getState().questionLoadError).toBeNull()
+  })
+
+  it('does not fall back to unrelated questions for mastered_only strategy', async () => {
+    const useGameStore = await loadStore()
+    mockPoolRef.current = [createQuestion('a'), createQuestion('b')]
+    mockStatsRef.current = {
+      'q-a': { mastered: false },
+      'q-b': { mastered: false },
+    }
+
+    useGameStore.getState().updateQuestionSelectionStrategy('mastered_only')
+    await useGameStore.getState().startNewGame()
+
+    expect(useGameStore.getState().questionLoadError).toContain('当前答题策略下没有可用题目')
+    expect(useGameStore.getState().gamePhase).toBe('ready')
+    expect(useGameStore.getState().currentQuestion).toBeNull()
+  })
+
+  it('limits unmastered_only strategy to non-mastered questions', async () => {
+    const useGameStore = await loadStore()
+    mockPoolRef.current = [createQuestion('a'), createQuestion('b'), createQuestion('c')]
+    mockStatsRef.current = {
+      'q-a': { mastered: true },
+      'q-b': { mastered: false },
+      'q-c': { mastered: true },
+    }
+
+    useGameStore.getState().updateQuestionSelectionStrategy('unmastered_only')
+    await useGameStore.getState().startNewGame()
+
+    expect(useGameStore.getState().currentQuestion).toBe('q-b')
     expect(useGameStore.getState().totalRounds).toBe(1)
     expect(useGameStore.getState().questionLoadError).toBeNull()
+  })
+
+  it('keeps default rounds in per_round_random mode even when candidate pool is small', async () => {
+    const useGameStore = await loadStore()
+    mockPoolRef.current = [createQuestion('solo')]
+
+    useGameStore.getState().updateQuestionRandomMode('per_round_random')
+    await useGameStore.getState().startNewGame()
+
+    expect(useGameStore.getState().currentQuestion).toBe('q-solo')
+    expect(useGameStore.getState().totalRounds).toBe(5)
   })
 
   it('keeps last-round double time when available questions shrink total rounds', async () => {

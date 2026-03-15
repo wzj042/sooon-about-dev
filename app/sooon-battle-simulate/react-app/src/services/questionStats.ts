@@ -43,6 +43,7 @@ export const STATS_BASED_STRATEGIES: QuestionSelectionStrategy[] = [
   'slow_thinking_focused',
   'common_sense_only',
   'ethics_only',
+  'unmastered_only',
   'mastered_only',
 ]
 

@@ -1,7 +1,8 @@
 ﻿import { useEffect, useMemo, useState } from 'react'
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
 
-import type { QuestionSelectionStrategy } from '../../domain/types'
+import type { QuestionRandomMode, QuestionSelectionStrategy } from '../../domain/types'
+import type { QuestionSelectionCounts } from '../../services/questionSelection'
 import { DEFAULT_AVATAR_SRC, isImageAvatarSource } from '../../domain/avatar'
 import { normalizePublicAssetUrl } from '../../utils/publicAsset'
 import {
@@ -32,8 +33,11 @@ interface SettingsModalProps {
     titleSpacingPx: number
     titleWrapChars: number
     questionSelectionStrategy: QuestionSelectionStrategy
+    questionRandomMode: QuestionRandomMode
     autoMasterTimeLeft: number
   }
+  questionSelectionCounts: QuestionSelectionCounts
+  questionSelectionCountsLoading?: boolean
   playerAvatarHtml: string
   opponentAvatarHtml: string
   onOpenAvatarModal: (context: 'player' | 'opponent') => void
@@ -51,6 +55,7 @@ interface SettingsModalProps {
     titleSpacingPx: number
     titleWrapChars: number
     questionSelectionStrategy: QuestionSelectionStrategy
+    questionRandomMode: QuestionRandomMode
     autoMasterTimeLeft: number
   }) => void
   disableQuestionSelectionStrategy?: boolean
@@ -69,6 +74,7 @@ interface DraftState {
   titleSpacingPx: string
   titleWrapChars: string
   questionSelectionStrategy: QuestionSelectionStrategy
+  questionRandomMode: QuestionRandomMode
   autoMasterTimeLeft: string
 }
 
@@ -102,6 +108,8 @@ function onlyNumericKeyboard(event: ReactKeyboardEvent<HTMLInputElement>) {
 export function SettingsModal({
   open,
   values,
+  questionSelectionCounts,
+  questionSelectionCountsLoading = false,
   playerAvatarHtml,
   opponentAvatarHtml,
   onOpenAvatarModal,
@@ -121,6 +129,7 @@ export function SettingsModal({
     titleSpacingPx,
     titleWrapChars,
     questionSelectionStrategy,
+    questionRandomMode,
     autoMasterTimeLeft,
   } = values
 
@@ -135,7 +144,8 @@ export function SettingsModal({
     optionWrapChars: String(DEFAULT_OPTION_WRAP_CHARS),
     titleSpacingPx: String(DEFAULT_TITLE_SPACING_PX),
     titleWrapChars: String(DEFAULT_TITLE_WRAP_CHARS),
-    questionSelectionStrategy: 'shuffled_traversal_recent_first',
+    questionSelectionStrategy: 'all_questions',
+    questionRandomMode: 'shuffled_cycle',
     autoMasterTimeLeft: '0',
   })
 
@@ -153,6 +163,7 @@ export function SettingsModal({
       titleSpacingPx: String(titleSpacingPx),
       titleWrapChars: String(titleWrapChars),
       questionSelectionStrategy,
+      questionRandomMode,
       autoMasterTimeLeft: String(autoMasterTimeLeft),
     })
   }, [
@@ -165,6 +176,7 @@ export function SettingsModal({
     optionWrapChars,
     opponentId,
     playerId,
+    questionRandomMode,
     questionSelectionStrategy,
     titleSpacingPx,
     titleWrapChars,
@@ -232,6 +244,7 @@ export function SettingsModal({
       titleSpacingPx: normalized.titleSpacingPx,
       titleWrapChars: normalized.titleWrapChars,
       questionSelectionStrategy: draft.questionSelectionStrategy,
+      questionRandomMode: draft.questionRandomMode,
       autoMasterTimeLeft: normalized.autoMasterTimeLeft,
     })
 
@@ -246,6 +259,7 @@ export function SettingsModal({
       titleSpacingPx: String(normalized.titleSpacingPx),
       titleWrapChars: String(normalized.titleWrapChars),
       questionSelectionStrategy: prev.questionSelectionStrategy,
+      questionRandomMode: prev.questionRandomMode,
       autoMasterTimeLeft: String(normalized.autoMasterTimeLeft),
     }))
 
@@ -253,6 +267,17 @@ export function SettingsModal({
       onClose()
     }
   }
+
+  const strategyAvailableCount = questionSelectionCounts[draft.questionSelectionStrategy] ?? 0
+  const totalQuestionCount = questionSelectionCounts.all_questions
+  const strategyAvailabilityText = questionSelectionCountsLoading
+    ? '正在统计当前策略可用题数...'
+    : `当前策略可选题数 ${strategyAvailableCount} / ${totalQuestionCount}`
+  const randomModeDescription = questionSelectionCountsLoading
+    ? '正在统计题目池...'
+    : draft.questionRandomMode === 'shuffled_cycle'
+      ? `从这 ${strategyAvailableCount} 题中打乱后依次出题，不重复`
+      : `从这 ${strategyAvailableCount} 题中每轮随机抽取，可重复`
 
   return (
     <Modal open={open} title="游戏设置" onClose={onClose}>
@@ -368,7 +393,7 @@ export function SettingsModal({
 
         <div className="setting-group">
           <label className="setting-label" htmlFor="question-selection-strategy">
-            选题策略
+            答题策略
           </label>
           <select
             className="setting-input"
@@ -383,17 +408,42 @@ export function SettingsModal({
               }))
             }}
           >
-            <option value="repeatable_random">可重复随机</option>
-            <option value="shuffled_traversal_recent_first">打乱后遍历（优先练新更新）</option>
+            <option value="all_questions">全部题目</option>
             <option value="unseen_first">做未做过的题</option>
             <option value="mistake_focused">做易错题</option>
             <option value="slow_thinking_focused">做想得久的题</option>
             <option value="common_sense_only">做常识题（common_sense）</option>
             <option value="ethics_only">做伦理题</option>
+            <option value="unmastered_only">做未掌握题</option>
             <option value="mastered_only">做掌握题</option>
           </select>
           <div className="setting-description">
-            {disableQuestionSelectionStrategy ? '当前为队列顺序答题模式，题目来源策略已禁用' : '选择每局游戏如何选取题目'}
+            {disableQuestionSelectionStrategy ? '当前为队列顺序答题模式，题目来源策略已禁用' : strategyAvailabilityText}
+          </div>
+        </div>
+
+        <div className="setting-group">
+          <label className="setting-label" htmlFor="question-random-mode">
+            随机答题策略
+          </label>
+          <select
+            className="setting-input"
+            disabled={disableQuestionSelectionStrategy}
+            id="question-random-mode"
+            value={draft.questionRandomMode}
+            onBlur={() => commit(false)}
+            onChange={(event) => {
+              setDraft((prev) => ({
+                ...prev,
+                questionRandomMode: event.target.value as QuestionRandomMode,
+              }))
+            }}
+          >
+            <option value="shuffled_cycle">打乱遍历</option>
+            <option value="per_round_random">每轮随机抽</option>
+          </select>
+          <div className="setting-description">
+            {disableQuestionSelectionStrategy ? '当前为队列顺序答题模式，随机答题策略已禁用' : randomModeDescription}
           </div>
         </div>
 

@@ -2,16 +2,18 @@ import { create } from 'zustand'
 
 import { DEFAULT_AVATAR_SRC } from '../domain/avatar'
 import { calculateScore } from '../domain/scoring'
-import type { AnimationState, GameStore, OpponentState, QuestionItem, QuestionSelectionStrategy, RoundHistory } from '../domain/types'
+import type { AnimationState, GameStore, OpponentState, QuestionItem, QuestionRandomMode, QuestionSelectionStrategy, RoundHistory } from '../domain/types'
 import { generateRandomAvatar } from '../services/avatarService'
-import { buildRoundQuestion, loadQuestionPool } from '../services/questionBank'
-import { averageResponseMs, getQuestionStat, isCommonSenseType, isEthicsType, loadQuestionStatsMap, recordQuestionAttempt } from '../services/questionStats'
+import { buildRoundQuestion, loadQuestionBank, shuffle } from '../services/questionBank'
+import { buildQuestionSelectionPool } from '../services/questionSelection'
+import { loadQuestionStatsMap, recordQuestionAttempt } from '../services/questionStats'
 import { TimerRegistry } from './timers'
 
 const DEFAULT_TOTAL_ROUNDS = 5
 const TIMER_TICK_MS = 80
 const DEFAULT_MAX_SCORE = 900
-const DEFAULT_QUESTION_SELECTION_STRATEGY: QuestionSelectionStrategy = 'shuffled_traversal_recent_first'
+const DEFAULT_QUESTION_SELECTION_STRATEGY: QuestionSelectionStrategy = 'all_questions'
+const DEFAULT_QUESTION_RANDOM_MODE: QuestionRandomMode = 'shuffled_cycle'
 const FAST_RESULT_DELAY_MS = 280
 const FAST_WRONG_RESULT_DELAY_MS = 650
 
@@ -66,146 +68,12 @@ const DEFAULT_STATE = {
   aiSpeedRange: [1280, 2900] as [number, number],
   aiAccuracy: 0.6,
   questionSelectionStrategy: DEFAULT_QUESTION_SELECTION_STRATEGY,
+  questionRandomMode: DEFAULT_QUESTION_RANDOM_MODE,
   practiceQueueMode: false,
   practiceQueueTotal: 0,
   practiceQueuePracticed: 0,
 
   questionLoadError: null as string | null,
-}
-
-function parseUpdatedTimestamp(updatedAt?: string): number | null {
-  if (typeof updatedAt !== 'string') return null
-  const trimmed = updatedAt.trim()
-  if (trimmed.length === 0) return null
-
-  const match = /^(\d{4})-(\d{1,2})-(\d{1,2})(?:\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?$/.exec(trimmed)
-  if (!match) return null
-
-  const parsed = new Date(
-    Number(match[1]),
-    Number(match[2]) - 1,
-    Number(match[3]),
-    Number(match[4] ?? 0),
-    Number(match[5] ?? 0),
-    Number(match[6] ?? 0),
-  ).getTime()
-
-  return Number.isNaN(parsed) ? null : parsed
-}
-
-function buildWeightedRecentTraversal(bank: QuestionItem[], requiredCount: number): QuestionItem[] {
-  const stats = loadQuestionStatsMap()
-  const ranked = [...bank]
-    .map((item) => {
-      const entry = getQuestionStat(item.question, stats)
-      return {
-        item,
-        practicedCount: entry?.seenCount ?? 0,
-        updatedTimestamp: parseUpdatedTimestamp(item.updatedAt),
-        seed: Math.random(),
-      }
-    })
-    .sort((left, right) => {
-      // Prefer never-seen and least-practiced questions first.
-      if (left.practicedCount !== right.practicedCount) return left.practicedCount - right.practicedCount
-
-      // Within the same practice level, start from newer questions.
-      const leftTime = left.updatedTimestamp
-      const rightTime = right.updatedTimestamp
-      if (leftTime !== null && rightTime !== null && leftTime !== rightTime) return rightTime - leftTime
-      if (leftTime !== null && rightTime === null) return -1
-      if (leftTime === null && rightTime !== null) return 1
-      return left.seed - right.seed
-    })
-    .map((row) => row.item)
-
-  return ranked.slice(0, Math.min(requiredCount, ranked.length))
-}
-
-function buildUnseenFirstSelection(bank: QuestionItem[], requiredCount: number): QuestionItem[] {
-  const stats = loadQuestionStatsMap()
-  const unseen = bank.filter((item) => {
-    const entry = getQuestionStat(item.question, stats)
-    return !entry || entry.seenCount <= 0
-  })
-
-  const picked = [...unseen].sort(() => Math.random() - 0.5).slice(0, requiredCount)
-  if (picked.length >= requiredCount) return picked
-
-  const rest = bank.filter((item) => !picked.some((current) => current.question === item.question))
-  const fill = buildWeightedRecentTraversal(rest, requiredCount - picked.length)
-  return [...picked, ...fill]
-}
-
-function buildMistakeFocusedSelection(bank: QuestionItem[], requiredCount: number): QuestionItem[] {
-  const stats = loadQuestionStatsMap()
-  const ranked = [...bank]
-    .map((item) => {
-      const entry = getQuestionStat(item.question, stats)
-      if (!entry || entry.answeredCount <= 0) return { item, score: -1, seed: Math.random() }
-
-      const wrongRate = entry.wrongCount / Math.max(1, entry.answeredCount)
-      const score = wrongRate * 10 + entry.wrongCount
-      return { item, score, seed: Math.random() }
-    })
-    .sort((left, right) => {
-      if (left.score !== right.score) return right.score - left.score
-      return left.seed - right.seed
-    })
-    .map((row) => row.item)
-
-  return ranked.slice(0, Math.min(requiredCount, ranked.length))
-}
-
-function buildSlowThinkingSelection(bank: QuestionItem[], requiredCount: number): QuestionItem[] {
-  const stats = loadQuestionStatsMap()
-  const ranked = [...bank]
-    .map((item) => {
-      const entry = getQuestionStat(item.question, stats)
-      return {
-        item,
-        avgMs: averageResponseMs(entry),
-        seed: Math.random(),
-      }
-    })
-    .sort((left, right) => {
-      if (left.avgMs !== right.avgMs) return right.avgMs - left.avgMs
-      return left.seed - right.seed
-    })
-    .map((row) => row.item)
-
-  return ranked.slice(0, Math.min(requiredCount, ranked.length))
-}
-
-function buildTypeOnlySelection(bank: QuestionItem[], requiredCount: number, matcher: (type?: string) => boolean): QuestionItem[] {
-  const filtered = bank.filter((item) => matcher(item.type))
-  if (filtered.length === 0) return []
-  return buildWeightedRecentTraversal(filtered, requiredCount)
-}
-
-function filterMasteryAwareQuestionBank(bank: QuestionItem[], strategy: QuestionSelectionStrategy): QuestionItem[] {
-  const stats = loadQuestionStatsMap()
-
-  if (strategy === 'mastered_only') {
-    const mastered = bank.filter((item) => getQuestionStat(item.question, stats)?.mastered === true)
-    return mastered.length > 0 ? mastered : bank
-  }
-
-  const nonMastered = bank.filter((item) => getQuestionStat(item.question, stats)?.mastered !== true)
-  return nonMastered.length > 0 ? nonMastered : bank
-}
-
-function dedupeQuestionBank(bank: QuestionItem[]): QuestionItem[] {
-  const used = new Set<string>()
-  const deduped: QuestionItem[] = []
-
-  for (const item of bank) {
-    if (!item.question || used.has(item.question)) continue
-    used.add(item.question)
-    deduped.push(item)
-  }
-
-  return deduped
 }
 
 function normalizeQueueCursor(cursor: number, length: number): number {
@@ -226,6 +94,7 @@ export const useGameStore = create<GameStore>((set, get) => {
 
   let questionBank: QuestionItem[] = []
   let selectedQuestions: QuestionItem[] = []
+  let questionSelectionPool: QuestionItem[] = []
   let practiceQueueQuestions: QuestionItem[] = []
   let practiceQueueCursor = 0
   let practiceQueueProgress = 0
@@ -272,18 +141,16 @@ export const useGameStore = create<GameStore>((set, get) => {
     const requiredCount = Math.max(1, Math.floor(count))
 
     if (practiceQueueQuestions.length > 0) {
-      const stats = loadQuestionStatsMap()
-      const isMastered = (question: string): boolean => getQuestionStat(question, stats)?.mastered === true
       const used = new Set<string>()
       const queueWindow = rotateByCursor(practiceQueueQuestions, practiceQueueCursor)
       const preferred = queueWindow.filter((item) => {
         if (used.has(item.question)) return false
-        if (isMastered(item.question)) return false
         used.add(item.question)
         return true
       })
 
       selectedQuestions = preferred.slice(0, requiredCount)
+      questionSelectionPool = selectedQuestions
       set({
         questionLoadError: selectedQuestions.length === 0 ? 'No practiceable items in queue. Please re-filter in Question Bank.' : null,
       })
@@ -295,9 +162,9 @@ export const useGameStore = create<GameStore>((set, get) => {
       return
     }
 
-    if (questionBank.length < requiredCount) {
+    if (questionBank.length === 0) {
       try {
-        questionBank = await loadQuestionPool(requiredCount)
+        questionBank = await loadQuestionBank()
         set({ questionLoadError: null })
       } catch (error) {
         questionBank = []
@@ -307,68 +174,37 @@ export const useGameStore = create<GameStore>((set, get) => {
 
     if (questionBank.length === 0) {
       selectedQuestions = []
+      questionSelectionPool = []
       return
     }
 
-    const strategy = get().questionSelectionStrategy
-    const isStrictTypeStrategy = strategy === 'common_sense_only' || strategy === 'ethics_only'
+    const state = get()
+    questionSelectionPool = buildQuestionSelectionPool(questionBank, state.questionSelectionStrategy, loadQuestionStatsMap())
 
-    if (strategy === 'repeatable_random') {
+    if (questionSelectionPool.length === 0) {
+      selectedQuestions = []
+      set({ questionLoadError: '当前答题策略下没有可用题目，请切换策略。' })
+      return
+    }
+
+    set({ questionLoadError: null })
+
+    if (state.questionRandomMode === 'per_round_random') {
       selectedQuestions = []
       return
     }
 
-    const dedupedBank = dedupeQuestionBank(questionBank)
-    const candidateBank = dedupeQuestionBank(filterMasteryAwareQuestionBank(dedupedBank, strategy))
-
-    if (selectedQuestions.length !== requiredCount) {
-      if (strategy === 'unseen_first') {
-        selectedQuestions = buildUnseenFirstSelection(candidateBank, requiredCount)
-      } else if (strategy === 'mistake_focused') {
-        selectedQuestions = buildMistakeFocusedSelection(candidateBank, requiredCount)
-      } else if (strategy === 'slow_thinking_focused') {
-        selectedQuestions = buildSlowThinkingSelection(candidateBank, requiredCount)
-      } else if (strategy === 'common_sense_only') {
-        selectedQuestions = buildTypeOnlySelection(candidateBank, requiredCount, isCommonSenseType)
-      } else if (strategy === 'ethics_only') {
-        selectedQuestions = buildTypeOnlySelection(candidateBank, requiredCount, isEthicsType)
-      } else if (strategy === 'mastered_only') {
-        selectedQuestions = buildWeightedRecentTraversal(candidateBank, requiredCount)
-      } else {
-        selectedQuestions = buildWeightedRecentTraversal(candidateBank, requiredCount)
-      }
-
-      if (!isStrictTypeStrategy && selectedQuestions.length === 0) {
-        selectedQuestions = buildWeightedRecentTraversal(candidateBank, requiredCount)
-      }
-
-      if (!isStrictTypeStrategy && selectedQuestions.length < requiredCount) {
-        const used = new Set(selectedQuestions.map((item) => item.question))
-        const fallbackPool = dedupedBank.filter((item) => !used.has(item.question))
-        const supplements = buildWeightedRecentTraversal(fallbackPool, requiredCount - selectedQuestions.length)
-        if (supplements.length > 0) {
-          selectedQuestions = [...selectedQuestions, ...supplements]
-        }
-      }
-
-      // If unique question count is lower than requested rounds, shrink round count to avoid repeats via modulo.
-      if (selectedQuestions.length > 0 && selectedQuestions.length < requiredCount) {
-        set({ totalRounds: selectedQuestions.length })
-      }
-
-      if (isStrictTypeStrategy && selectedQuestions.length === 0) {
-        set({ questionLoadError: 'No questions available for current strategy. Please switch strategy.' })
-      }
+    selectedQuestions = shuffle(questionSelectionPool).slice(0, requiredCount)
+    if (selectedQuestions.length > 0 && selectedQuestions.length < requiredCount) {
+      set({ totalRounds: selectedQuestions.length })
     }
   }
 
   const getRoundQuestion = (round: number): { question: string; options: string[]; correctAnswer: number } | null => {
-    const strategy = get().questionSelectionStrategy
-
-    if (strategy === 'repeatable_random' && questionBank.length > 0 && practiceQueueQuestions.length === 0) {
-      const candidateBank = filterMasteryAwareQuestionBank(questionBank, strategy)
-      const randomIndex = Math.floor(Math.random() * candidateBank.length)
-      return buildRoundQuestion(candidateBank[randomIndex])
+    if (practiceQueueQuestions.length === 0 && get().questionRandomMode === 'per_round_random') {
+      if (questionSelectionPool.length === 0) return null
+      const randomIndex = Math.floor(Math.random() * questionSelectionPool.length)
+      return buildRoundQuestion(questionSelectionPool[randomIndex])
     }
 
     if (selectedQuestions.length === 0) return null
@@ -659,6 +495,7 @@ export const useGameStore = create<GameStore>((set, get) => {
     })
 
     selectedQuestions = []
+    questionSelectionPool = []
     if (!state.practiceQueueMode) {
       practiceQueueQuestions = []
     }
@@ -775,8 +612,17 @@ export const useGameStore = create<GameStore>((set, get) => {
 
     updateQuestionSelectionStrategy: (strategy) => {
       selectedQuestions = []
+      questionSelectionPool = []
       set({
         questionSelectionStrategy: strategy,
+      })
+    },
+
+    updateQuestionRandomMode: (mode) => {
+      selectedQuestions = []
+      questionSelectionPool = []
+      set({
+        questionRandomMode: mode,
       })
     },
 
@@ -785,6 +631,7 @@ export const useGameStore = create<GameStore>((set, get) => {
       practiceQueueCursor = 0
       practiceQueueProgress = Math.max(0, Math.floor(practicedCount))
       selectedQuestions = []
+      questionSelectionPool = []
       const normalizedTotalRounds = Math.max(1, questions.length)
       set({
         totalRounds: normalizedTotalRounds,
@@ -832,6 +679,8 @@ export const useGameStore = create<GameStore>((set, get) => {
       practiceQueueQuestions = []
       practiceQueueCursor = 0
       practiceQueueProgress = 0
+      selectedQuestions = []
+      questionSelectionPool = []
     },
 
     destroy: () => {
