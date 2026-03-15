@@ -2,7 +2,7 @@
 
 import { beforeEach, describe, expect, it } from 'vitest'
 
-import { advanceLastPracticeQueueProgress, consumePracticeQueue, loadLastPracticeQueueSession, savePracticeQueue } from './practiceQueue'
+import { advanceLastPracticeQueueProgress, clearPracticeQueueSession, consumePracticeQueue, loadLastPracticeQueueSession, savePracticeQueue } from './practiceQueue'
 
 function buildQuestion(index: number) {
   return {
@@ -45,5 +45,20 @@ describe('practiceQueue capacity', () => {
     expect(session).not.toBeNull()
     expect(session?.cursor).toBe(3)
     expect(session?.practicedCount).toBe(13)
+  })
+
+  it('clears pending queue, fallback queue, and last session together', () => {
+    const questions = Array.from({ length: 3 }, (_, index) => buildQuestion(index))
+    savePracticeQueue(questions)
+    consumePracticeQueue()
+
+    expect(loadLastPracticeQueueSession()).not.toBeNull()
+    expect(sessionStorage.getItem('sooon-practice-queue-fallback')).not.toBeNull()
+
+    clearPracticeQueueSession()
+
+    expect(loadLastPracticeQueueSession()).toBeNull()
+    expect(localStorage.getItem('sooon-practice-queue')).toBeNull()
+    expect(sessionStorage.getItem('sooon-practice-queue-fallback')).toBeNull()
   })
 })

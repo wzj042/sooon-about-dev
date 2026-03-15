@@ -21,7 +21,6 @@ const PRACTICE_QUEUE_SESSION_CHANGED_EVENT = 'sooon-practice-queue-session-chang
 // Storage limits should be determined by browser capacity instead.
 const PRACTICE_QUEUE_MAX_ITEMS = Number.MAX_SAFE_INTEGER
 const PRACTICE_QUEUE_FALLBACK_TTL_MS = 5000
-export const MIN_PRACTICE_QUEUE_ITEMS = 5
 
 function emitPracticeQueueSessionChanged(): void {
   window.dispatchEvent(new Event(PRACTICE_QUEUE_SESSION_CHANGED_EVENT))
@@ -51,6 +50,23 @@ export function savePracticeQueue(questions: QuestionItem[]): number {
   setValue(PRACTICE_QUEUE_KEY, payload)
   saveLastPracticeQueueSession(normalized, 0)
   return normalized.length
+}
+
+export function clearPracticeQueueSession(): void {
+  try {
+    localStorage.removeItem(PRACTICE_QUEUE_KEY)
+    localStorage.removeItem(LAST_PRACTICE_QUEUE_SESSION_KEY)
+  } catch {
+    // no-op
+  }
+
+  try {
+    sessionStorage.removeItem(PRACTICE_QUEUE_FALLBACK_KEY)
+  } catch {
+    // no-op
+  }
+
+  emitPracticeQueueSessionChanged()
 }
 
 export function consumePracticeQueue(): QuestionItem[] {

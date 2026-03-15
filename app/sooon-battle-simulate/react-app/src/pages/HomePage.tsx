@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { APP_ROUTES } from '../app/paths'
-import { loadLastPracticeQueueSession, subscribePracticeQueueSession } from '../services/practiceQueue'
+import { clearPracticeQueueSession, loadLastPracticeQueueSession, subscribePracticeQueueSession } from '../services/practiceQueue'
 import {
   clearQuestionHistory,
   getQuestionStatsSummary,
@@ -168,7 +168,8 @@ export function HomePage() {
     if (!secondConfirmed) return
 
     clearQuestionHistory()
-    setUserDataTransferMessage('历史答题记录已删除')
+    clearPracticeQueueSession()
+    setUserDataTransferMessage('历史答题记录和队列练习记录已删除')
   }
 
   const handleImportUserData = async (file: File) => {
