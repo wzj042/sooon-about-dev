@@ -59,6 +59,7 @@ const DEFAULT_STATE = {
   maxTime: 150,
   currentMaxTime: 150,
   timerRunning: false,
+  timeDecrement: 1,
 
   animations: getDefaultAnimations(),
   buttonStates: {
@@ -322,7 +323,7 @@ export const useGameStore = create<GameStore>((set, get) => {
       }
 
       if (current.timeLeft > 0) {
-        set({ timeLeft: Math.max(0, current.timeLeft - 1) })
+        set({ timeLeft: Math.max(0, current.timeLeft - current.timeDecrement) })
         return
       }
 
@@ -453,6 +454,7 @@ export const useGameStore = create<GameStore>((set, get) => {
 
     const isFinalRound = round === current.totalRounds
     const timeForRound = isFinalRound ? current.maxTime * 2 : current.maxTime
+    const timeDecrement = isFinalRound ? 2 : 1
 
     set((state) => ({
       currentRound: round,
@@ -468,6 +470,7 @@ export const useGameStore = create<GameStore>((set, get) => {
       timeLeft: timeForRound,
       currentMaxTime: timeForRound,
       timerRunning: false,
+      timeDecrement,
       buttonStates: {
         options: questionData.options,
         initialized: true,
@@ -512,6 +515,7 @@ export const useGameStore = create<GameStore>((set, get) => {
       timeLeft: state.maxTime,
       currentMaxTime: state.maxTime,
       timerRunning: false,
+      timeDecrement: 1,
       history: [],
       questionLoadError: null,
       animations: getDefaultAnimations(),
@@ -718,6 +722,7 @@ export const useGameStore = create<GameStore>((set, get) => {
         timeLeft: state.maxTime,
         currentMaxTime: state.maxTime,
         timerRunning: false,
+        timeDecrement: 1,
         history: [],
         animations: getDefaultAnimations(),
         buttonStates: {

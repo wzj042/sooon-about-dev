@@ -84,6 +84,7 @@ export interface GameState {
   maxTime: number
   currentMaxTime: number
   timerRunning: boolean
+  timeDecrement: number
 
   animations: AnimationState
   buttonStates: ButtonStates
