@@ -25,7 +25,7 @@ const CACHE_POLL_DELAY_MS = 1200
 const MAX_CACHE_POLL_ROUNDS = 16
 const ANSWER_LABELS = ['A', 'B', 'C', 'D'] as const
 
-const VIRTUAL_ROW_HEIGHT = 188
+const VIRTUAL_ROW_HEIGHT = 160
 const VIRTUAL_OVERSCAN = 6
 const VIRTUAL_FALLBACK_VIEWPORT_HEIGHT = 640
 const MAX_VIRTUAL_RENDER_ROWS = 28
@@ -511,7 +511,7 @@ async function readCachedQuestionRows(cacheState: QuestionBankCacheState): Promi
 }
 
 const PAGE_SHELL_CLASS =
-  'h-screen h-[100svh] h-[100dvh] overflow-x-hidden overflow-y-auto bg-[#f4f7f5] px-3 py-3 text-slate-900 sm:overflow-hidden sm:px-4 sm:py-6'
+  'h-screen h-[100svh] h-[100dvh] overflow-x-hidden overflow-y-auto bg-[#f4f7f5] px-3 py-3 text-slate-900 sm:overflow-hidden sm:px-4 sm:py-4'
 const PANEL_CLASS =
   'rounded-[28px] border border-[#d8e5df] bg-white shadow-[0_16px_42px_rgba(20,71,60,0.08)]'
 const TONAL_PANEL_CLASS = 'rounded-[24px] border border-[#d8e5df] bg-[#f7fbf9]'
@@ -523,9 +523,9 @@ const INPUT_CLASS =
   'w-full rounded-2xl border border-[#d3e2db] bg-white px-3 py-2 text-sm text-[#183a31] outline-none transition placeholder:text-[#8aa098] focus:border-[#0f7b66] focus:ring-4 focus:ring-[#0f7b66]/10 disabled:cursor-not-allowed disabled:bg-[#f1f5f3]'
 const SELECT_CLASS =
   'rounded-2xl border border-[#d3e2db] bg-white px-3 py-2 text-sm text-[#183a31] outline-none transition focus:border-[#0f7b66] focus:ring-4 focus:ring-[#0f7b66]/10 disabled:cursor-not-allowed disabled:bg-[#f1f5f3]'
-const FILTER_LABEL_CLASS = 'flex flex-col gap-1.5 text-sm font-medium text-[#31574d]'
+const FILTER_LABEL_CLASS = 'flex flex-col gap-1 text-sm font-medium text-[#31574d]'
 const CHECKBOX_CLASS = 'h-3.5 w-3.5 accent-[#0f7b66]'
-const TABLE_CELL_CLASS = 'border-r border-[#e1ebe7] px-3 py-3 last:border-r-0'
+const TABLE_CELL_CLASS = 'border-r border-[#e1ebe7] px-3 py-2.5 last:border-r-0'
 
 export function QuestionBankPage() {
   const navigate = useNavigate()
@@ -1156,13 +1156,13 @@ export function QuestionBankPage() {
       case 'question':
         return (
           <td className={`${TABLE_CELL_CLASS} text-[#173a31]`} key={columnKey} style={style}>
-            <div className="max-h-24 overflow-hidden whitespace-pre-wrap break-words leading-7">{row.item.question}</div>
+            <div className="max-h-20 overflow-hidden whitespace-pre-wrap break-words leading-6">{row.item.question}</div>
           </td>
         )
       case 'answer':
         return (
           <td className={`${TABLE_CELL_CLASS} text-[#45645b]`} key={columnKey} style={style}>
-            <div className="max-h-20 overflow-hidden whitespace-pre-wrap break-words leading-6">{buildAnswerText(row.item)}</div>
+            <div className="max-h-16 overflow-hidden whitespace-pre-wrap break-words leading-5">{buildAnswerText(row.item)}</div>
           </td>
         )
       case 'options':
@@ -1177,13 +1177,13 @@ export function QuestionBankPage() {
               title={isAnswerVisible ? '点击隐藏答案高亮' : '点击显示答案高亮'}
               onClick={() => toggleOptionReveal(row)}
             >
-              <ul className="max-h-24 space-y-1 overflow-hidden">
+              <ul className="max-h-[6.5rem] space-y-0.5 overflow-hidden">
                 {row.item.options.map((option, optionIndex) => (
                   <li
                     className={
                       isAnswerVisible && optionIndex === row.item.answer
-                        ? 'truncate rounded-xl bg-[#e8f5f0] px-2 py-1 font-semibold text-[#0f7b66]'
-                        : 'truncate rounded-xl px-2 py-1 text-[#546d65]'
+                        ? 'truncate rounded-lg bg-[#e8f5f0] px-2 py-0.5 text-[13px] font-semibold leading-5 text-[#0f7b66]'
+                        : 'truncate rounded-lg px-2 py-0.5 text-[13px] leading-5 text-[#546d65]'
                     }
                     key={`${row.item.question}-option-${optionIndex}`}
                   >
@@ -1197,7 +1197,7 @@ export function QuestionBankPage() {
       case 'type':
         return (
           <td className={`${TABLE_CELL_CLASS} whitespace-nowrap text-[#45645b]`} key={columnKey} style={style}>
-            <span className="inline-flex rounded-full bg-[#eef6f2] px-3 py-1 text-xs font-semibold text-[#356056]">
+            <span className="inline-flex rounded-full bg-[#eef6f2] px-2.5 py-0.5 text-xs font-semibold text-[#356056]">
               {row.normalizedType || '-'}
             </span>
           </td>
@@ -1261,16 +1261,33 @@ export function QuestionBankPage() {
     }
   }
 
+  const headerPanelPaddingClass = filtersCollapsed ? 'p-3 sm:p-4' : 'p-4 sm:p-6'
+  const headingClass = filtersCollapsed
+    ? 'text-xl font-semibold tracking-tight text-[#143930] sm:text-[1.7rem]'
+    : 'text-2xl font-semibold tracking-tight text-[#143930] sm:text-3xl'
+  const headerActionsClass = filtersCollapsed ? 'flex flex-wrap gap-1.5' : 'flex flex-wrap gap-2'
+  const filterPanelClass = filtersCollapsed
+    ? 'mt-3 hidden'
+    : `mt-4 grid gap-2.5 p-3.5 ${TONAL_PANEL_CLASS} md:grid-cols-2 xl:grid-cols-6`
+  const summaryBarClass = filtersCollapsed ? 'mt-3 flex flex-wrap items-center gap-1.5 text-sm' : 'mt-4 flex flex-wrap items-center gap-2 text-sm'
+  const toolsGridClass = filtersCollapsed
+    ? 'mt-2 grid gap-2 xl:grid-cols-[minmax(0,260px),minmax(0,1fr)] xl:items-center'
+    : 'mt-3 grid gap-3 xl:grid-cols-[auto,minmax(0,1fr)] xl:items-start'
+  const fieldPanelClass = filtersCollapsed
+    ? 'min-w-0 max-w-full rounded-[20px] border border-[#d8e5df] bg-[#f7fbf9] px-2.5 py-1.5'
+    : 'min-w-0 max-w-full rounded-[22px] border border-[#d8e5df] bg-[#f7fbf9] px-3 py-2'
+  const tableSectionSpacingClass = filtersCollapsed ? 'mt-2.5 sm:mt-3' : 'mt-3 sm:mt-4'
+
   return (
     <main className={PAGE_SHELL_CLASS}>
       <div className="mx-auto flex h-full min-h-full w-full max-w-[1320px] flex-col">
-        <section className={`${PANEL_CLASS} p-4 sm:p-6`}>
-          <div className="flex flex-wrap items-start justify-between gap-4">
+        <section className={`${PANEL_CLASS} ${headerPanelPaddingClass}`}>
+          <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <h1 className="text-2xl font-semibold tracking-tight text-[#143930] sm:text-3xl">题库表</h1>
+              <h1 className={headingClass}>题库表</h1>
             </div>
 
-            <div className="flex flex-wrap gap-2">
+            <div className={headerActionsClass}>
               <button
                 aria-controls="question-bank-filters"
                 aria-expanded={!filtersCollapsed}
@@ -1296,7 +1313,7 @@ export function QuestionBankPage() {
           </div>
 
           <div
-            className={filtersCollapsed ? 'mt-4 hidden' : `mt-5 grid gap-3 p-4 ${TONAL_PANEL_CLASS} md:grid-cols-2 xl:grid-cols-6`}
+            className={filterPanelClass}
             id="question-bank-filters"
           >
             <label className={`${FILTER_LABEL_CLASS} xl:col-span-2`}>
@@ -1470,18 +1487,18 @@ export function QuestionBankPage() {
 
           </div>
 
-          <div className="mt-4 flex flex-wrap items-center gap-2 text-sm">
+          <div className={summaryBarClass}>
             <span className="rounded-full bg-[#edf5f1] px-3 py-1.5 font-medium text-[#4e6c63]">当前筛选: {filteredRows.length}/{rows.length}</span>
             {syncing ? <span className="rounded-full bg-[#e6f5ef] px-3 py-1.5 font-medium text-[#0f7b66]">本地缓存后台同步中...</span> : null}
             <button
-              className="inline-flex items-center rounded-full border border-[#cfe0d9] bg-white px-3 py-1.5 text-sm font-semibold text-[#33584e] transition hover:border-[#aacdbf] hover:bg-[#f4faf7]"
+              className="inline-flex items-center rounded-full border border-[#cfe0d9] bg-white px-3 py-1.5 text-[13px] font-semibold text-[#33584e] transition hover:border-[#aacdbf] hover:bg-[#f4faf7]"
               type="button"
               onClick={() => setInvertMatch((prev) => !prev)}
             >
               {invertMatch ? '取消反转筛选' : '反转当前筛选'}
             </button>
             <button
-              className="inline-flex items-center rounded-full border border-[#cfe0d9] bg-white px-3 py-1.5 text-sm font-semibold text-[#175549] transition hover:border-[#aacdbf] hover:bg-[#f4faf7]"
+              className="inline-flex items-center rounded-full border border-[#cfe0d9] bg-white px-3 py-1.5 text-[13px] font-semibold text-[#175549] transition hover:border-[#aacdbf] hover:bg-[#f4faf7]"
               disabled={startingQueuePractice}
               type="button"
               onClick={() => {
@@ -1492,10 +1509,10 @@ export function QuestionBankPage() {
             </button>
           </div>
 
-          <div className="mt-3 grid gap-3 xl:grid-cols-[auto,minmax(0,1fr)] xl:items-start">
-            <div className="flex flex-wrap items-start gap-3">
+          <div className={toolsGridClass}>
+            <div className="flex flex-wrap items-start gap-2">
               {filtersCollapsed ? (
-                <div className="min-w-[220px] max-w-sm flex-1">
+                <div className="min-w-[200px] max-w-sm flex-1">
                   <div className="relative">
                     <input
                       className={`${INPUT_CLASS} pr-14`}
@@ -1522,7 +1539,7 @@ export function QuestionBankPage() {
                 </div>
               ) : null}
               <button
-                className="inline-flex w-full items-center justify-center rounded-full border border-[#9bcfbf] bg-[#edf8f4] px-4 py-2 text-sm font-semibold text-[#17614f] transition hover:border-[#7fbba8] hover:bg-[#e4f3ed] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+                className="inline-flex w-full items-center justify-center rounded-full border border-[#9bcfbf] bg-[#edf8f4] px-3.5 py-1.5 text-[13px] font-semibold text-[#17614f] transition hover:border-[#7fbba8] hover:bg-[#e4f3ed] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
                 disabled={filteredRows.length === 0}
                 type="button"
                 onClick={handleDownloadFilteredRows}
@@ -1531,8 +1548,8 @@ export function QuestionBankPage() {
               </button>
             </div>
 
-            <div className="min-w-0 max-w-full rounded-[22px] border border-[#d8e5df] bg-[#f7fbf9] px-3 py-2">
-              <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
+            <div className={fieldPanelClass}>
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
                 <span className="text-sm font-semibold text-[#31574d]">字段显示</span>
                 {COLUMN_DEFINITIONS.map((column) => (
                   <label className="inline-flex items-center gap-1 text-xs text-[#526c64]" key={column.key}>
@@ -1552,15 +1569,15 @@ export function QuestionBankPage() {
           {error ? <p className="mt-3 rounded-2xl bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p> : null}
         </section>
 
-        <section className={`${PANEL_CLASS} relative mt-3 flex min-h-0 flex-1 overflow-hidden sm:mt-4 sm:min-h-0`}>
+        <section className={`${PANEL_CLASS} ${tableSectionSpacingClass} relative flex min-h-0 flex-1 overflow-hidden sm:min-h-0`}>
           <div className="h-full w-full overflow-auto pr-1" ref={scrollContainerRef}>
             <table className="table-fixed text-left text-sm" ref={tableRef} style={tableStyle}>
-              <thead className="sticky top-0 z-10 bg-[#eef7f3]/95 text-xs uppercase tracking-[0.18em] text-[#56716a] backdrop-blur">
+              <thead className="sticky top-0 z-10 bg-[#eef7f3]/95 text-xs uppercase tracking-[0.16em] text-[#56716a] backdrop-blur">
                 <tr>
                   {visibleColumnDefs.map((column) => {
                     return (
                       <th
-                        className="group relative border-r border-[#d8e5df] px-3 py-3 last:border-r-0"
+                        className="group relative border-r border-[#d8e5df] px-3 py-2.5 last:border-r-0"
                         key={column.key}
                         style={{ width: `var(${getColumnCssVarName(column.key)})`, minWidth: `${column.minWidth}px` }}
                       >
