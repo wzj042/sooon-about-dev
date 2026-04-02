@@ -58,6 +58,11 @@ export interface QuestionBankCacheState {
   questionCount: number
 }
 
+export interface QuestionBankCacheSyncState {
+  shouldSync: boolean
+  reason: 'up_to_date' | 'cache_empty' | 'cache_incomplete' | 'manifest_changed' | 'manifest_unavailable'
+}
+
 interface QuestionBankMetaEntry {
   key: string
   value: unknown
@@ -413,6 +418,43 @@ async function writeCacheMeta(manifestSignature: string, syncedPages: string[]):
   await transactionToPromise(transaction)
 }
 
+async function hydrateCacheMetaFromManifest(
+  manifest: ParsedManifest,
+  cacheState: QuestionBankCacheState,
+  localManifestSignature: string | null,
+): Promise<QuestionBankCacheState> {
+  if (!isIndexedDbAvailable()) return cacheState
+
+  const signatureCompatible =
+    (cacheState.manifestSignature === null || cacheState.manifestSignature === manifest.signature) &&
+    (localManifestSignature === null || localManifestSignature === manifest.signature)
+  const cacheLooksComplete = manifest.total > 0 && cacheState.questionCount >= manifest.total
+  const metadataIncomplete =
+    cacheState.manifestSignature !== manifest.signature ||
+    cacheState.syncedPageCount < manifest.pages.length ||
+    localManifestSignature === null
+
+  if (!signatureCompatible || !cacheLooksComplete || !metadataIncomplete) {
+    return cacheState
+  }
+
+  try {
+    await writeCacheMeta(
+      manifest.signature,
+      manifest.pages.map((page) => page.file),
+    )
+    setStoredManifestSignature(manifest.signature)
+
+    return {
+      manifestSignature: manifest.signature,
+      syncedPageCount: manifest.pages.length,
+      questionCount: cacheState.questionCount,
+    }
+  } catch {
+    return cacheState
+  }
+}
+
 async function resetCacheForManifest(manifestSignature: string): Promise<void> {
   const db = await openQuestionBankDb()
   const transaction = db.transaction([QUESTION_STORE_NAME, META_STORE_NAME], 'readwrite')
@@ -647,6 +689,60 @@ export async function loadCachedQuestionBankPreview(limit: number): Promise<Ques
 
 export async function loadQuestionBankCacheState(): Promise<QuestionBankCacheState> {
   return readQuestionCacheStateSafe()
+}
+
+export async function inspectQuestionBankCacheSync(signal?: AbortSignal): Promise<QuestionBankCacheSyncState> {
+  try {
+    const manifestPayload = await fetchQuestionPayload(QUESTION_BANK_MANIFEST_URL, signal)
+    const manifest = parseManifest(manifestPayload)
+    if (!manifest) {
+      return {
+        shouldSync: false,
+        reason: 'manifest_unavailable',
+      }
+    }
+
+    const localManifestSignature = getStoredManifestSignature()
+    let cacheState = await readQuestionCacheStateSafe()
+    cacheState = await hydrateCacheMetaFromManifest(manifest, cacheState, localManifestSignature)
+
+    const nextLocalManifestSignature =
+      cacheState.manifestSignature === manifest.signature ? manifest.signature : getStoredManifestSignature()
+    const localSignatureChanged =
+      nextLocalManifestSignature !== null && nextLocalManifestSignature !== manifest.signature
+    const dbSignatureChanged = cacheState.manifestSignature !== null && cacheState.manifestSignature !== manifest.signature
+
+    if (localSignatureChanged || dbSignatureChanged) {
+      return {
+        shouldSync: true,
+        reason: 'manifest_changed',
+      }
+    }
+
+    if (cacheState.questionCount <= 0) {
+      return {
+        shouldSync: true,
+        reason: 'cache_empty',
+      }
+    }
+
+    if (cacheState.manifestSignature === manifest.signature && cacheState.syncedPageCount >= manifest.pages.length) {
+      return {
+        shouldSync: false,
+        reason: 'up_to_date',
+      }
+    }
+
+    return {
+      shouldSync: true,
+      reason: 'cache_incomplete',
+    }
+  } catch {
+    return {
+      shouldSync: false,
+      reason: 'manifest_unavailable',
+    }
+  }
 }
 
 export async function loadQuestionPool(requiredCount: number, signal?: AbortSignal): Promise<QuestionItem[]> {
