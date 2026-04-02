@@ -63,39 +63,6 @@ const workflowSteps = [
   },
 ] as const
 
-const screenshotCards = [
-  {
-    title: '首页总览',
-    description: '集中展示入口、热力图和核心统计，适合先判断今天该练什么。',
-    image: 'assets/docs/home-overview.png',
-    badge: 'Overview',
-  },
-  {
-    title: '模拟对战主界面',
-    description: '保留抢答场景里的得分、倒计时、题目切换和对手反馈，适合练临场节奏。',
-    image: 'assets/docs/game-simulator.png',
-    badge: 'Battle',
-  },
-  {
-    title: '队列练习模式',
-    description: '把筛选后的题目按顺序压成训练流，配合掌握阈值和自动下一题做高密度刷题。',
-    image: 'assets/docs/queue-practice.png',
-    badge: 'Queue',
-  },
-  {
-    title: '题库表筛选',
-    description: '支持大范围筛选、排序、字段开关和 CSV 导出，适合先找题再开练。',
-    image: 'assets/docs/question-bank.png',
-    badge: 'Table',
-  },
-] as const
-
-const fitScenarios = [
-  '赛前热身：先调高 AI 强度，快速熟悉抢答节奏。',
-  '集中纠错：在题库表筛出错题或未掌握题，生成队列连续刷。',
-  '长期自测：靠热力图、正确率和平均用时观察自己的节奏变化。',
-] as const
-
 export function AboutPage() {
   return (
     <main className="relative min-h-screen overflow-hidden bg-[#edf7f3] px-4 py-6 text-[#163a31] sm:px-6 sm:py-8">
@@ -108,28 +75,14 @@ export function AboutPage() {
 
       <div className="relative mx-auto flex w-full max-w-6xl flex-col gap-6 lg:gap-8">
         <section className={`${surfaceClass} overflow-hidden`}>
-          <div className="grid gap-6 p-6 sm:p-8 lg:grid-cols-[1.15fr_0.85fr] lg:p-10">
-            <div>
+          <div className="grid gap-6 p-6 sm:p-8 lg:grid-cols-[minmax(0,0.84fr)_minmax(360px,1.16fr)] lg:items-center lg:p-10">
+            <div className="flex flex-col justify-center gap-6 lg:pr-8">
               {/* <div className="inline-flex rounded-full border border-[#0f7b66]/12 bg-[#edf8f4] px-4 py-2 text-xs font-semibold uppercase tracking-[0.26em] text-[#0f7b66]">
                 Sooon Battle Simulator
               </div> */}
-              <h1 className="mt-5 max-w-3xl text-4xl font-semibold leading-tight text-[#0d3b32] sm:text-5xl">网站说明</h1>
-              {/* <p className="mt-4 max-w-2xl text-base leading-8 text-[#47675f] sm:text-lg">
-                这是一个围绕素问抢答节奏打造的练习站点。它不只是在浏览器里“做题”，而是把对战、刷题、题库筛选、统计回看和数据备份串成一套完整训练流程。
-              </p> */}
+              <h1 className="max-w-3xl text-4xl font-semibold leading-tight text-[#0d3b32] sm:text-5xl">网站说明</h1>
 
-              {/* <div className="mt-6 flex flex-wrap gap-2">
-                {['Teal MD3 信息架构', '真实页面截图', '本地数据优先'].map((chip) => (
-                  <span
-                    className="rounded-full border border-[#0f7b66]/10 bg-[#f4fbf8] px-4 py-2 text-sm font-medium text-[#29594f]"
-                    key={chip}
-                  >
-                    {chip}
-                  </span>
-                ))}
-              </div> */}
-
-              <div className="mt-8 flex flex-wrap gap-3">
+              <div className="flex flex-wrap gap-3">
                 <Link
                   className="inline-flex items-center rounded-full bg-[#0f7b66] px-6 py-3 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(15,123,102,0.24)] transition hover:bg-[#0d705d]"
                   to={APP_ROUTES.game}
@@ -151,7 +104,7 @@ export function AboutPage() {
               </div>
             </div>
 
-            <div className="grid gap-3">
+            <div className="grid content-start gap-3">
               <article className="rounded-[32px] bg-[#0f5e4f] p-6 text-white shadow-[0_18px_40px_rgba(15,94,79,0.28)]">
                 <div className="text-sm font-medium text-[#b2ebda]">练习链路</div>
                 <div className="mt-3 text-3xl font-semibold leading-tight">首页 → 筛题 → 对战 / 队列 → 统计回看</div>

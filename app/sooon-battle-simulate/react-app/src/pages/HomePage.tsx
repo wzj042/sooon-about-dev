@@ -239,12 +239,6 @@ export function HomePage() {
   }, [dailyStats])
 
   const heatmapWidth = heatmap.totalColumns * CELL_SIZE + Math.max(0, heatmap.totalColumns - 1) * CELL_GAP
-  const heroChips = [
-    // totalQuestions ? `${totalQuestions} 道题` : '题库统计载入中',
-    // lastQueueInfo ? `上次练到第 ${queueNextIndex} 题` : '支持自动记录训练进度',
-    // '本地保存训练历史',
-    // '三种练习模式',
-  ]
   const metricCards = [
     {
       label: '总体正确率',
@@ -317,25 +311,14 @@ export function HomePage() {
 
       <div className="relative mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-6 sm:px-6 sm:py-8 lg:gap-8">
         <section className="overflow-hidden rounded-[36px] border border-[#0f5c4d]/10 bg-white/78 shadow-[0_24px_70px_rgba(16,92,77,0.13)] backdrop-blur-xl">
-          <div className="grid gap-6 p-6 sm:p-8 lg:grid-cols-[1.15fr_0.85fr] lg:p-10">
-            <div className="flex flex-col justify-between gap-6">
+          <div className="grid gap-6 p-6 sm:p-8 lg:grid-cols-[minmax(0,0.92fr)_minmax(320px,1.08fr)] lg:items-center lg:p-10">
+            <div className="flex flex-col justify-center gap-6 lg:pr-6">
               <div>
                 {/* <div className="inline-flex rounded-full border border-[#0f7b66]/12 bg-[#edf8f4] px-4 py-2 text-xs font-semibold uppercase tracking-[0.26em] text-[#0f7b66]">
                   Sooon Battle Simulator
                 </div> */}
-                <h1 className="mt-5 max-w-3xl text-4xl font-semibold leading-tight text-[#0d3b32] sm:text-5xl">{homeCopy.title}</h1>
+                <h1 className="max-w-3xl text-4xl font-semibold leading-tight text-[#0d3b32] sm:text-5xl">{homeCopy.title}</h1>
                 <p className="mt-4 max-w-2xl text-base leading-8 text-[#47675f] sm:text-lg">{homeCopy.description}</p>
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                {heroChips.map((chip) => (
-                  <span
-                    className="rounded-full border border-[#0f7b66]/10 bg-[#f4fbf8] px-4 py-2 text-sm font-medium text-[#29594f]"
-                    key={chip}
-                  >
-                    {chip}
-                  </span>
-                ))}
               </div>
 
               <div className="flex flex-wrap gap-3">

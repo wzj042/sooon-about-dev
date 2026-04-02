@@ -1471,10 +1471,7 @@ export function QuestionBankPage() {
           </div>
 
           <div className="mt-4 flex flex-wrap items-center gap-2 text-sm">
-            <span className="rounded-full bg-[#edf5f1] px-3 py-1.5 font-medium text-[#4e6c63]">本地库题目: {rows.length}</span>
-            <span className="rounded-full bg-[#edf5f1] px-3 py-1.5 font-medium text-[#4e6c63]">
-              {invertMatch ? '反转后' : '筛选后'}: {filteredRows.length}
-            </span>
+            <span className="rounded-full bg-[#edf5f1] px-3 py-1.5 font-medium text-[#4e6c63]">当前筛选: {filteredRows.length}/{rows.length}</span>
             {syncing ? <span className="rounded-full bg-[#e6f5ef] px-3 py-1.5 font-medium text-[#0f7b66]">本地缓存后台同步中...</span> : null}
             <button
               className="inline-flex items-center rounded-full border border-[#cfe0d9] bg-white px-3 py-1.5 text-sm font-semibold text-[#33584e] transition hover:border-[#aacdbf] hover:bg-[#f4faf7]"
@@ -1495,56 +1492,60 @@ export function QuestionBankPage() {
             </button>
           </div>
 
-          <div className="mt-3 flex flex-wrap items-start gap-3">
-            {filtersCollapsed ? (
-              <div className="min-w-[220px] max-w-sm flex-1">
-                <div className="relative">
-                  <input
-                    className={`${INPUT_CLASS} pr-14`}
-                    placeholder="关键词搜索"
-                    ref={searchInputRef}
-                    type="text"
-                    value={keyword}
-                    onChange={(event) => setKeyword(event.target.value)}
-                  />
-                  {keyword ? (
-                    <button
-                      aria-label="清空搜索关键词"
-                      className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full border border-transparent px-2 py-1 text-xs font-semibold text-[#617a73] transition hover:border-[#cfe0d9] hover:text-[#175549]"
-                      type="button"
-                      onClick={() => {
-                        setKeyword('')
-                        searchInputRef.current?.focus()
-                      }}
-                    >
-                      清空
-                    </button>
-                  ) : null}
+          <div className="mt-3 grid gap-3 xl:grid-cols-[auto,minmax(0,1fr)] xl:items-start">
+            <div className="flex flex-wrap items-start gap-3">
+              {filtersCollapsed ? (
+                <div className="min-w-[220px] max-w-sm flex-1">
+                  <div className="relative">
+                    <input
+                      className={`${INPUT_CLASS} pr-14`}
+                      placeholder="关键词搜索"
+                      ref={searchInputRef}
+                      type="text"
+                      value={keyword}
+                      onChange={(event) => setKeyword(event.target.value)}
+                    />
+                    {keyword ? (
+                      <button
+                        aria-label="清空搜索关键词"
+                        className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full border border-transparent px-2 py-1 text-xs font-semibold text-[#617a73] transition hover:border-[#cfe0d9] hover:text-[#175549]"
+                        type="button"
+                        onClick={() => {
+                          setKeyword('')
+                          searchInputRef.current?.focus()
+                        }}
+                      >
+                        清空
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
-              </div>
-            ) : null}
-            <button
-              className="inline-flex items-center rounded-full border border-[#9bcfbf] bg-[#edf8f4] px-4 py-2 text-sm font-semibold text-[#17614f] transition hover:border-[#7fbba8] hover:bg-[#e4f3ed] disabled:cursor-not-allowed disabled:opacity-60"
-              disabled={filteredRows.length === 0}
-              type="button"
-              onClick={handleDownloadFilteredRows}
-            >
-              下载当前筛选数据（CSV）
-            </button>
+              ) : null}
+              <button
+                className="inline-flex w-full items-center justify-center rounded-full border border-[#9bcfbf] bg-[#edf8f4] px-4 py-2 text-sm font-semibold text-[#17614f] transition hover:border-[#7fbba8] hover:bg-[#e4f3ed] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+                disabled={filteredRows.length === 0}
+                type="button"
+                onClick={handleDownloadFilteredRows}
+              >
+                下载当前筛选数据（CSV）
+              </button>
+            </div>
 
-            <div className="flex flex-wrap items-center gap-2 rounded-[22px] border border-[#d8e5df] bg-[#f7fbf9] px-3 py-2">
-              <span className="text-sm font-semibold text-[#31574d]">字段显示</span>
-              {COLUMN_DEFINITIONS.map((column) => (
-                <label className="inline-flex items-center gap-1 text-xs text-[#526c64]" key={column.key}>
-                  <input
-                    checked={visibleColumns[column.key]}
-                    className={CHECKBOX_CLASS}
-                    type="checkbox"
-                    onChange={() => toggleColumnVisibility(column.key)}
-                  />
-                  {column.label}
-                </label>
-              ))}
+            <div className="min-w-0 max-w-full rounded-[22px] border border-[#d8e5df] bg-[#f7fbf9] px-3 py-2">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
+                <span className="text-sm font-semibold text-[#31574d]">字段显示</span>
+                {COLUMN_DEFINITIONS.map((column) => (
+                  <label className="inline-flex items-center gap-1 text-xs text-[#526c64]" key={column.key}>
+                    <input
+                      checked={visibleColumns[column.key]}
+                      className={CHECKBOX_CLASS}
+                      type="checkbox"
+                      onChange={() => toggleColumnVisibility(column.key)}
+                    />
+                    {column.label}
+                  </label>
+                ))}
+              </div>
             </div>
           </div>
 
