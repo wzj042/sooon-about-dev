@@ -7,6 +7,7 @@ import {
   loadCachedQuestionBank,
   loadCachedQuestionBankPreview,
   loadQuestionBankCacheState,
+  inspectQuestionBankCacheSync,
   loadQuestionPool,
   type QuestionBankCacheState,
 } from '../services/questionBank'
@@ -34,7 +35,7 @@ const OPTIONS_REVEAL_SESSION_KEY = 'question-bank-options-reveal-map'
 const FILTER_STATE_STORAGE_KEY = 'question-bank-filter-state'
 const SUWEN_TYPE = '素问'
 const COMMON_SENSE_TYPE_VALUE = '__common_sense_non_suwen__'
-const COMMON_SENSE_TYPE_LABEL = '🌌常识'
+const COMMON_SENSE_TYPE_LABEL = '🌌常识合集'
 const TYPE_FILTERS: TypeFilter[] = ['all', 'with_type', 'without_type']
 const STATS_FILTERS: StatsFilterMode[] = ['all', 'wrong_only', 'unseen_only', 'unmastered_only', 'mastered_only']
 const SORT_MODES: SortMode[] = [
@@ -501,6 +502,31 @@ async function readCurrentLocalQuestionRows(): Promise<QuestionItem[]> {
   return []
 }
 
+async function readCachedQuestionRows(cacheState: QuestionBankCacheState): Promise<QuestionItem[]> {
+  if (cacheState.questionCount <= 0) return []
+  if (cacheState.questionCount <= INITIAL_CACHE_PREVIEW_ROWS) {
+    return loadCachedQuestionBank()
+  }
+  return loadCachedQuestionBankPreview(INITIAL_CACHE_PREVIEW_ROWS)
+}
+
+const PAGE_SHELL_CLASS =
+  'h-screen h-[100svh] h-[100dvh] overflow-x-hidden overflow-y-auto bg-[#f4f7f5] px-3 py-3 text-slate-900 sm:overflow-hidden sm:px-4 sm:py-6'
+const PANEL_CLASS =
+  'rounded-[28px] border border-[#d8e5df] bg-white shadow-[0_16px_42px_rgba(20,71,60,0.08)]'
+const TONAL_PANEL_CLASS = 'rounded-[24px] border border-[#d8e5df] bg-[#f7fbf9]'
+const SECONDARY_BUTTON_CLASS =
+  'inline-flex items-center rounded-full border border-[#cfe0d9] bg-white px-4 py-2 text-sm font-semibold text-[#215447] transition hover:border-[#aacdbf] hover:bg-[#f4faf7]'
+const PRIMARY_BUTTON_CLASS =
+  'inline-flex items-center rounded-full bg-[#0f7b66] px-4 py-2 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(15,123,102,0.22)] transition hover:bg-[#0d6d5b]'
+const INPUT_CLASS =
+  'w-full rounded-2xl border border-[#d3e2db] bg-white px-3 py-2 text-sm text-[#183a31] outline-none transition placeholder:text-[#8aa098] focus:border-[#0f7b66] focus:ring-4 focus:ring-[#0f7b66]/10 disabled:cursor-not-allowed disabled:bg-[#f1f5f3]'
+const SELECT_CLASS =
+  'rounded-2xl border border-[#d3e2db] bg-white px-3 py-2 text-sm text-[#183a31] outline-none transition focus:border-[#0f7b66] focus:ring-4 focus:ring-[#0f7b66]/10 disabled:cursor-not-allowed disabled:bg-[#f1f5f3]'
+const FILTER_LABEL_CLASS = 'flex flex-col gap-1.5 text-sm font-medium text-[#31574d]'
+const CHECKBOX_CLASS = 'h-3.5 w-3.5 accent-[#0f7b66]'
+const TABLE_CELL_CLASS = 'border-r border-[#e1ebe7] px-3 py-3 last:border-r-0'
+
 export function QuestionBankPage() {
   const navigate = useNavigate()
   const initialFilterState = loadFilterStateFromStorage()
@@ -547,63 +573,115 @@ export function QuestionBankPage() {
     let cancelled = false
     let timeoutId: number | null = null
 
-    const bootstrap = async () => {
-      setLoading(true)
-      setError(null)
+    const pollCacheUntilStable = async (initialCacheState: QuestionBankCacheState) => {
+      let previousCacheState = initialCacheState
+      let stableRounds = 0
+      let pollRounds = 0
 
-      try {
-        const initialRows = await readCurrentLocalQuestionRows()
+      const pollCache = async () => {
         if (cancelled) return
 
-        setRows(initialRows)
-        setLoading(false)
-        setSyncing(true)
-
-        let previousCacheState = await loadQuestionBankCacheState()
-        let stableRounds = 0
-        let pollRounds = 0
-
-        void loadQuestionPool(1).catch(() => undefined)
-
-        const pollCache = async () => {
-          if (cancelled) return
-
-          pollRounds += 1
-          try {
-            const latestState = await loadQuestionBankCacheState()
-            if (!areCacheStatesEqual(previousCacheState, latestState)) {
-              previousCacheState = latestState
-              stableRounds = 0
-              const previewRows = await loadCachedQuestionBankPreview(INITIAL_CACHE_PREVIEW_ROWS)
-              if (!cancelled && previewRows.length > 0) {
-                setRows(previewRows)
-              }
-            } else {
-              stableRounds += 1
+        pollRounds += 1
+        try {
+          const latestState = await loadQuestionBankCacheState()
+          if (!areCacheStatesEqual(previousCacheState, latestState)) {
+            previousCacheState = latestState
+            stableRounds = 0
+            const previewRows = await loadCachedQuestionBankPreview(INITIAL_CACHE_PREVIEW_ROWS)
+            if (!cancelled && previewRows.length > 0) {
+              setRows(previewRows)
             }
-          } catch {
+          } else {
             stableRounds += 1
           }
+        } catch {
+          stableRounds += 1
+        }
 
-          if (stableRounds >= 3 || pollRounds >= MAX_CACHE_POLL_ROUNDS) {
+        if (stableRounds >= 3 || pollRounds >= MAX_CACHE_POLL_ROUNDS) {
+          if (!cancelled) {
+            const fullRows = await loadCachedQuestionBank().catch(() => [])
+            if (!cancelled && fullRows.length > 0) {
+              setRows(fullRows)
+            }
             if (!cancelled) {
-              const fullRows = await loadCachedQuestionBank().catch(() => [])
-              if (fullRows.length > 0) {
-                setRows(fullRows)
-              }
               setSyncing(false)
             }
-            return
           }
-
-          timeoutId = window.setTimeout(() => {
-            void pollCache()
-          }, CACHE_POLL_DELAY_MS)
+          return
         }
 
         timeoutId = window.setTimeout(() => {
           void pollCache()
         }, CACHE_POLL_DELAY_MS)
+      }
+
+      timeoutId = window.setTimeout(() => {
+        void pollCache()
+      }, CACHE_POLL_DELAY_MS)
+    }
+
+    const bootstrap = async () => {
+      setLoading(true)
+      setError(null)
+      setSyncing(false)
+
+      try {
+        const initialCacheState = await loadQuestionBankCacheState()
+        if (cancelled) return
+
+        if (initialCacheState.questionCount > 0) {
+          const initialRows = await readCachedQuestionRows(initialCacheState)
+          if (cancelled) return
+
+          setRows(initialRows)
+          setLoading(false)
+
+          const syncState = await inspectQuestionBankCacheSync()
+          if (cancelled) return
+
+          if (!syncState.shouldSync) {
+            if (initialCacheState.questionCount > initialRows.length) {
+              void loadCachedQuestionBank()
+                .then((fullRows) => {
+                  if (cancelled || fullRows.length === 0) return
+                  setRows(fullRows)
+                })
+                .catch(() => undefined)
+            }
+            setSyncing(false)
+            return
+          }
+
+          setSyncing(true)
+          void loadQuestionPool(1).catch(() => undefined)
+          void pollCacheUntilStable(initialCacheState)
+          return
+        }
+
+        const initialRows = await readCurrentLocalQuestionRows()
+        if (cancelled) return
+
+        setRows(initialRows)
+        setLoading(false)
+
+        const nextCacheState = await loadQuestionBankCacheState()
+        if (cancelled) return
+
+        if (nextCacheState.questionCount <= 0) {
+          if (initialRows.length === 0) {
+            setSyncing(false)
+          } else {
+            const fullRows = await loadCachedQuestionBank().catch(() => [])
+            if (!cancelled && fullRows.length > 0) {
+              setRows(fullRows)
+            }
+          }
+          return
+        }
+
+        setSyncing(true)
+        void pollCacheUntilStable(nextCacheState)
       } catch (loadError) {
         if (cancelled) return
         setLoading(false)
@@ -1071,20 +1149,20 @@ export function QuestionBankPage() {
     switch (columnKey) {
       case 'index':
         return (
-          <td className="whitespace-nowrap border-r border-[#2196f3]/16 px-3 py-3 font-medium text-[#1b5fa6]/80 last:border-r-0" key={columnKey} style={style}>
+          <td className={`${TABLE_CELL_CLASS} whitespace-nowrap font-semibold text-[#0f6d59]`} key={columnKey} style={style}>
             {displayIndex}
           </td>
         )
       case 'question':
         return (
-          <td className="border-r border-[#2196f3]/16 px-3 py-3 text-slate-800 last:border-r-0" key={columnKey} style={style}>
-            <div className="max-h-24 overflow-hidden whitespace-pre-wrap break-words">{row.item.question}</div>
+          <td className={`${TABLE_CELL_CLASS} text-[#173a31]`} key={columnKey} style={style}>
+            <div className="max-h-24 overflow-hidden whitespace-pre-wrap break-words leading-7">{row.item.question}</div>
           </td>
         )
       case 'answer':
         return (
-          <td className="border-r border-[#2196f3]/16 px-3 py-3 text-slate-700 last:border-r-0" key={columnKey} style={style}>
-            <div className="max-h-20 overflow-hidden whitespace-pre-wrap break-words">{buildAnswerText(row.item)}</div>
+          <td className={`${TABLE_CELL_CLASS} text-[#45645b]`} key={columnKey} style={style}>
+            <div className="max-h-20 overflow-hidden whitespace-pre-wrap break-words leading-6">{buildAnswerText(row.item)}</div>
           </td>
         )
       case 'options':
@@ -1093,7 +1171,7 @@ export function QuestionBankPage() {
           const isAnswerVisible = optionsRevealMap[revealKey] === true
           return (
             <td
-              className="border-r border-[#2196f3]/16 px-3 py-3 last:border-r-0"
+              className={`${TABLE_CELL_CLASS} cursor-pointer`}
               key={columnKey}
               style={style}
               title={isAnswerVisible ? '点击隐藏答案高亮' : '点击显示答案高亮'}
@@ -1103,7 +1181,9 @@ export function QuestionBankPage() {
                 {row.item.options.map((option, optionIndex) => (
                   <li
                     className={
-                      isAnswerVisible && optionIndex === row.item.answer ? 'truncate font-semibold text-[#0f6fc5]' : 'truncate text-slate-600'
+                      isAnswerVisible && optionIndex === row.item.answer
+                        ? 'truncate rounded-xl bg-[#e8f5f0] px-2 py-1 font-semibold text-[#0f7b66]'
+                        : 'truncate rounded-xl px-2 py-1 text-[#546d65]'
                     }
                     key={`${row.item.question}-option-${optionIndex}`}
                   >
@@ -1116,45 +1196,57 @@ export function QuestionBankPage() {
         }
       case 'type':
         return (
-          <td className="whitespace-nowrap border-r border-[#2196f3]/16 px-3 py-3 text-slate-700 last:border-r-0" key={columnKey} style={style}>
-            {row.normalizedType || '-'}
+          <td className={`${TABLE_CELL_CLASS} whitespace-nowrap text-[#45645b]`} key={columnKey} style={style}>
+            <span className="inline-flex rounded-full bg-[#eef6f2] px-3 py-1 text-xs font-semibold text-[#356056]">
+              {row.normalizedType || '-'}
+            </span>
           </td>
         )
       case 'updatedAt':
         return (
-          <td className="whitespace-nowrap border-r border-[#2196f3]/16 px-3 py-3 text-slate-700 last:border-r-0" key={columnKey} style={style}>
+          <td className={`${TABLE_CELL_CLASS} whitespace-nowrap text-[#45645b]`} key={columnKey} style={style}>
             {row.updatedAt ?? '-'}
           </td>
         )
       case 'answeredAt':
         return (
-          <td className="whitespace-nowrap border-r border-[#2196f3]/16 px-3 py-3 text-slate-700 last:border-r-0" key={columnKey} style={style}>
+          <td className={`${TABLE_CELL_CLASS} whitespace-nowrap text-[#45645b]`} key={columnKey} style={style}>
             {formatAnsweredAt(row.statEntry?.lastAnsweredAt ?? '')}
           </td>
         )
       case 'responseMs':
         return (
-          <td className="whitespace-nowrap border-r border-[#2196f3]/16 px-3 py-3 text-slate-700 last:border-r-0" key={columnKey} style={style}>
+          <td className={`${TABLE_CELL_CLASS} whitespace-nowrap text-[#45645b]`} key={columnKey} style={style}>
             {formatResponseMs(row.statEntry?.lastResponseMs ?? 0)}
           </td>
         )
       case 'accuracy':
         return (
-          <td className="whitespace-nowrap border-r border-[#2196f3]/16 px-3 py-3 text-slate-700 last:border-r-0" key={columnKey} style={style}>
-            {formatAccuracy(row.accuracyRate)}
+          <td className={`${TABLE_CELL_CLASS} whitespace-nowrap text-[#45645b]`} key={columnKey} style={style}>
+            <span
+              className={
+                row.accuracyRate !== null && row.accuracyRate >= 0.8
+                  ? 'font-semibold text-[#0f7b66]'
+                  : row.accuracyRate !== null && row.accuracyRate < 0.5
+                    ? 'font-semibold text-[#b4552d]'
+                    : ''
+              }
+            >
+              {formatAccuracy(row.accuracyRate)}
+            </span>
           </td>
         )
       case 'stats':
         return (
-          <td className="whitespace-nowrap border-r border-[#2196f3]/16 px-3 py-3 text-slate-700 last:border-r-0" key={columnKey} style={style}>
+          <td className={`${TABLE_CELL_CLASS} whitespace-nowrap text-[#45645b]`} key={columnKey} style={style}>
             {formatQuestionStat(row.statEntry)}
           </td>
         )
       case 'actions':
         return (
-          <td className="whitespace-nowrap border-r border-[#2196f3]/16 px-3 py-3 text-slate-700 last:border-r-0" key={columnKey} style={style}>
+          <td className={`${TABLE_CELL_CLASS} whitespace-nowrap text-[#45645b]`} key={columnKey} style={style}>
             <button
-              className="rounded border border-[#2196f3]/40 px-2 py-1 text-xs font-semibold text-[#0f4f90] hover:bg-[#eaf4ff]"
+              className="rounded-full border border-[#cfe0d9] bg-[#f4faf7] px-3 py-1.5 text-xs font-semibold text-[#175549] transition hover:border-[#aecaBE] hover:bg-[#e7f4ef]"
               type="button"
               onClick={() => {
                 setQuestionMastered(row.item.question, row.statEntry?.mastered !== true)
@@ -1170,32 +1262,32 @@ export function QuestionBankPage() {
   }
 
   return (
-    <main className="h-screen h-[100svh] h-[100dvh] overflow-x-hidden overflow-y-auto bg-[linear-gradient(180deg,#eaf4ff_0%,#f6faff_48%,#eef6ff_100%)] px-3 py-3 text-slate-900 sm:overflow-hidden sm:px-4 sm:py-8">
+    <main className={PAGE_SHELL_CLASS}>
       <div className="mx-auto flex h-full min-h-full w-full max-w-[1320px] flex-col">
-        <section className="rounded-2xl border border-[#2196f3]/15 bg-white/95 p-4 shadow-[0_12px_28px_rgba(33,150,243,0.12)] sm:p-8">
+        <section className={`${PANEL_CLASS} p-4 sm:p-6`}>
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <h1 className="text-2xl font-bold sm:text-3xl">题库表</h1>
+              <h1 className="text-2xl font-semibold tracking-tight text-[#143930] sm:text-3xl">题库表</h1>
             </div>
 
             <div className="flex flex-wrap gap-2">
               <button
                 aria-controls="question-bank-filters"
                 aria-expanded={!filtersCollapsed}
-                className="inline-flex items-center rounded-md border border-[#2196f3]/35 bg-white px-4 py-2 text-sm font-semibold text-[#1b5fa6] transition hover:border-[#2196f3] hover:bg-[#2196f3]/5 hover:text-[#0f4f90]"
+                className={SECONDARY_BUTTON_CLASS}
                 type="button"
                 onClick={() => setFiltersCollapsed((value) => !value)}
               >
                 {filtersCollapsed ? '展开筛选' : '折叠筛选'}
               </button>
               <Link
-                className="inline-flex items-center rounded-md border border-[#2196f3]/35 bg-white px-4 py-2 text-sm font-semibold text-[#1b5fa6] transition hover:border-[#2196f3] hover:bg-[#2196f3]/5 hover:text-[#0f4f90]"
+                className={SECONDARY_BUTTON_CLASS}
                 to={APP_ROUTES.home}
               >
                 返回首页
               </Link>
               <Link
-                className="inline-flex items-center rounded-md bg-[#2196f3] px-4 py-2 text-sm font-semibold text-white shadow-[0_8px_20px_rgba(33,150,243,0.35)] transition hover:bg-[#1e88e5]"
+                className={PRIMARY_BUTTON_CLASS}
                 to={APP_ROUTES.game}
               >
                 进入模拟答题
@@ -1204,14 +1296,14 @@ export function QuestionBankPage() {
           </div>
 
           <div
-            className={filtersCollapsed ? 'mt-4 hidden' : 'mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-6'}
+            className={filtersCollapsed ? 'mt-4 hidden' : `mt-5 grid gap-3 p-4 ${TONAL_PANEL_CLASS} md:grid-cols-2 xl:grid-cols-6`}
             id="question-bank-filters"
           >
-            <label className="flex flex-col gap-1 text-sm text-slate-700 xl:col-span-2">
+            <label className={`${FILTER_LABEL_CLASS} xl:col-span-2`}>
               关键词搜索
               <div className="relative">
                 <input
-                  className="w-full rounded-md border border-[#2196f3]/25 bg-white px-3 py-2 pr-12 text-sm outline-none transition placeholder:text-slate-400 focus:border-[#2196f3] focus:ring-2 focus:ring-[#2196f3]/20"
+                  className={`${INPUT_CLASS} pr-14`}
                   placeholder="按题目、选项、答案、类型搜索"
                   ref={searchInputRef}
                   type="text"
@@ -1221,7 +1313,7 @@ export function QuestionBankPage() {
                 {keyword ? (
                   <button
                     aria-label="清空搜索关键词"
-                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full border border-transparent px-2 py-1 text-xs font-semibold text-slate-500 transition hover:border-[#2196f3]/30 hover:text-[#1b5fa6]"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full border border-transparent px-2 py-1 text-xs font-semibold text-[#617a73] transition hover:border-[#cfe0d9] hover:text-[#175549]"
                     type="button"
                     onClick={() => {
                       setKeyword('')
@@ -1232,12 +1324,12 @@ export function QuestionBankPage() {
                   </button>
                 ) : null}
               </div>
-              <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-600">
-                <span className="font-semibold text-slate-500">搜索范围</span>
+              <div className="mt-1 flex flex-wrap items-center gap-2 rounded-2xl bg-[#edf5f1] px-3 py-2 text-xs text-[#5c756e]">
+                <span className="font-semibold text-[#45645b]">搜索范围</span>
                 <label className="inline-flex items-center gap-1">
                   <input
                     checked={searchScopes.question}
-                    className="h-3.5 w-3.5 accent-[#2196f3]"
+                    className={CHECKBOX_CLASS}
                     type="checkbox"
                     onChange={() => toggleSearchScope('question')}
                   />
@@ -1246,7 +1338,7 @@ export function QuestionBankPage() {
                 <label className="inline-flex items-center gap-1">
                   <input
                     checked={searchScopes.options}
-                    className="h-3.5 w-3.5 accent-[#2196f3]"
+                    className={CHECKBOX_CLASS}
                     type="checkbox"
                     onChange={() => toggleSearchScope('options')}
                   />
@@ -1255,7 +1347,7 @@ export function QuestionBankPage() {
                 <label className="inline-flex items-center gap-1">
                   <input
                     checked={searchScopes.answer}
-                    className="h-3.5 w-3.5 accent-[#2196f3]"
+                    className={CHECKBOX_CLASS}
                     type="checkbox"
                     onChange={() => toggleSearchScope('answer')}
                   />
@@ -1264,7 +1356,7 @@ export function QuestionBankPage() {
                 <label className="inline-flex items-center gap-1">
                   <input
                     checked={searchScopes.type}
-                    className="h-3.5 w-3.5 accent-[#2196f3]"
+                    className={CHECKBOX_CLASS}
                     type="checkbox"
                     onChange={() => toggleSearchScope('type')}
                   />
@@ -1273,10 +1365,10 @@ export function QuestionBankPage() {
               </div>
             </label>
 
-            <label className="flex flex-col gap-1 text-sm text-slate-700">
+            <label className={FILTER_LABEL_CLASS}>
               题目类型字段
               <select
-                className="rounded-md border border-[#2196f3]/25 bg-white px-3 py-2 text-sm outline-none transition focus:border-[#2196f3] focus:ring-2 focus:ring-[#2196f3]/20"
+                className={SELECT_CLASS}
                 value={typeFilter}
                 onChange={(event) => setTypeFilter(event.target.value as TypeFilter)}
               >
@@ -1286,15 +1378,15 @@ export function QuestionBankPage() {
               </select>
             </label>
 
-            <label className="flex flex-col gap-1 text-sm text-slate-700">
+            <label className={FILTER_LABEL_CLASS}>
               <span>
                 类型值
-                <span className="ml-1 align-super text-[10px] font-semibold text-slate-500">
+                <span className="ml-1 align-super text-[10px] font-semibold text-[#6f857e]">
                   ✨=素问，{COMMON_SENSE_TYPE_LABEL}=非素问合集
                 </span>
               </span>
               <select
-                className="rounded-md border border-[#2196f3]/25 bg-white px-3 py-2 text-sm outline-none transition focus:border-[#2196f3] focus:ring-2 focus:ring-[#2196f3]/20 disabled:cursor-not-allowed disabled:bg-[#2196f3]/10"
+                className={SELECT_CLASS}
                 disabled={typeFilter === 'without_type'}
                 value={selectedType}
                 onChange={(event) => setSelectedType(event.target.value)}
@@ -1311,10 +1403,10 @@ export function QuestionBankPage() {
               </select>
             </label>
 
-            <label className="flex flex-col gap-1 text-sm text-slate-700">
+            <label className={FILTER_LABEL_CLASS}>
               排序
               <select
-                className="rounded-md border border-[#2196f3]/25 bg-white px-3 py-2 text-sm outline-none transition focus:border-[#2196f3] focus:ring-2 focus:ring-[#2196f3]/20"
+                className={SELECT_CLASS}
                 value={sortMode}
                 onChange={(event) => setSortMode(event.target.value as SortMode)}
               >
@@ -1331,11 +1423,11 @@ export function QuestionBankPage() {
               </select>
             </label>
 
-            <label className="flex flex-col gap-1 text-sm text-slate-700">
+            <label className={FILTER_LABEL_CLASS}>
               更新时间
               <div className="flex items-center gap-2">
                 <input
-                  className="w-full rounded-md border border-[#2196f3]/25 bg-white px-3 py-2 text-sm outline-none transition focus:border-[#2196f3] focus:ring-2 focus:ring-[#2196f3]/20 disabled:cursor-not-allowed disabled:bg-[#2196f3]/10"
+                  className={INPUT_CLASS}
                   disabled={availableDates.length === 0}
                   list="qb-date-options"
                   max={dateRange?.max}
@@ -1351,7 +1443,7 @@ export function QuestionBankPage() {
                 </datalist>
                 {selectedDate ? (
                   <button
-                    className="whitespace-nowrap rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-600 transition hover:border-slate-400 hover:bg-slate-100"
+                    className="whitespace-nowrap rounded-full border border-[#cfe0d9] bg-white px-3 py-1.5 text-xs font-semibold text-[#4f6c64] transition hover:border-[#aacdbf] hover:bg-[#f4faf7]"
                     type="button"
                     onClick={() => setSelectedDate('')}
                   >
@@ -1361,10 +1453,10 @@ export function QuestionBankPage() {
               </div>
             </label>
 
-            <label className="flex flex-col gap-1 text-sm text-slate-700">
+            <label className={FILTER_LABEL_CLASS}>
               答题筛选
               <select
-                className="rounded-md border border-[#2196f3]/25 bg-white px-3 py-2 text-sm outline-none transition focus:border-[#2196f3] focus:ring-2 focus:ring-[#2196f3]/20"
+                className={SELECT_CLASS}
                 value={statsFilterMode}
                 onChange={(event) => setStatsFilterMode(event.target.value as StatsFilterMode)}
               >
@@ -1378,19 +1470,21 @@ export function QuestionBankPage() {
 
           </div>
 
-          <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-slate-600">
-            <span>本地库题目: {rows.length}</span>
-            <span>{invertMatch ? '反转后' : '筛选后'}: {filteredRows.length}</span>
-            {syncing ? <span className="font-medium text-[#2196f3]">本地缓存后台同步中...</span> : null}
+          <div className="mt-4 flex flex-wrap items-center gap-2 text-sm">
+            <span className="rounded-full bg-[#edf5f1] px-3 py-1.5 font-medium text-[#4e6c63]">本地库题目: {rows.length}</span>
+            <span className="rounded-full bg-[#edf5f1] px-3 py-1.5 font-medium text-[#4e6c63]">
+              {invertMatch ? '反转后' : '筛选后'}: {filteredRows.length}
+            </span>
+            {syncing ? <span className="rounded-full bg-[#e6f5ef] px-3 py-1.5 font-medium text-[#0f7b66]">本地缓存后台同步中...</span> : null}
             <button
-              className="inline-flex items-center rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-100"
+              className="inline-flex items-center rounded-full border border-[#cfe0d9] bg-white px-3 py-1.5 text-sm font-semibold text-[#33584e] transition hover:border-[#aacdbf] hover:bg-[#f4faf7]"
               type="button"
               onClick={() => setInvertMatch((prev) => !prev)}
             >
               {invertMatch ? '取消反转筛选' : '反转当前筛选'}
             </button>
             <button
-              className="inline-flex items-center rounded-md border border-[#2196f3]/35 bg-white px-3 py-1.5 text-sm font-semibold text-[#1b5fa6] transition hover:border-[#2196f3] hover:bg-[#2196f3]/5"
+              className="inline-flex items-center rounded-full border border-[#cfe0d9] bg-white px-3 py-1.5 text-sm font-semibold text-[#175549] transition hover:border-[#aacdbf] hover:bg-[#f4faf7]"
               disabled={startingQueuePractice}
               type="button"
               onClick={() => {
@@ -1406,7 +1500,7 @@ export function QuestionBankPage() {
               <div className="min-w-[220px] max-w-sm flex-1">
                 <div className="relative">
                   <input
-                    className="w-full rounded-md border border-[#2196f3]/25 bg-white px-3 py-2 pr-12 text-sm outline-none transition placeholder:text-slate-400 focus:border-[#2196f3] focus:ring-2 focus:ring-[#2196f3]/20"
+                    className={`${INPUT_CLASS} pr-14`}
                     placeholder="关键词搜索"
                     ref={searchInputRef}
                     type="text"
@@ -1416,7 +1510,7 @@ export function QuestionBankPage() {
                   {keyword ? (
                     <button
                       aria-label="清空搜索关键词"
-                      className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full border border-transparent px-2 py-1 text-xs font-semibold text-slate-500 transition hover:border-[#2196f3]/30 hover:text-[#1b5fa6]"
+                      className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full border border-transparent px-2 py-1 text-xs font-semibold text-[#617a73] transition hover:border-[#cfe0d9] hover:text-[#175549]"
                       type="button"
                       onClick={() => {
                         setKeyword('')
@@ -1430,7 +1524,7 @@ export function QuestionBankPage() {
               </div>
             ) : null}
             <button
-              className="inline-flex items-center rounded-md border border-emerald-400/60 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700 transition hover:border-emerald-500 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex items-center rounded-full border border-[#9bcfbf] bg-[#edf8f4] px-4 py-2 text-sm font-semibold text-[#17614f] transition hover:border-[#7fbba8] hover:bg-[#e4f3ed] disabled:cursor-not-allowed disabled:opacity-60"
               disabled={filteredRows.length === 0}
               type="button"
               onClick={handleDownloadFilteredRows}
@@ -1438,13 +1532,13 @@ export function QuestionBankPage() {
               下载当前筛选数据（CSV）
             </button>
 
-            <div className="flex flex-wrap items-center gap-2 rounded-md border border-[#2196f3]/25 bg-[#f5faff] px-3 py-2">
-              <span className="text-sm font-semibold text-[#1b5fa6]">字段显示</span>
+            <div className="flex flex-wrap items-center gap-2 rounded-[22px] border border-[#d8e5df] bg-[#f7fbf9] px-3 py-2">
+              <span className="text-sm font-semibold text-[#31574d]">字段显示</span>
               {COLUMN_DEFINITIONS.map((column) => (
-                <label className="inline-flex items-center gap-1 text-xs text-slate-700" key={column.key}>
+                <label className="inline-flex items-center gap-1 text-xs text-[#526c64]" key={column.key}>
                   <input
                     checked={visibleColumns[column.key]}
-                    className="h-3.5 w-3.5 accent-[#2196f3]"
+                    className={CHECKBOX_CLASS}
                     type="checkbox"
                     onChange={() => toggleColumnVisibility(column.key)}
                   />
@@ -1454,18 +1548,18 @@ export function QuestionBankPage() {
             </div>
           </div>
 
-          {error ? <p className="mt-3 rounded-md bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p> : null}
+          {error ? <p className="mt-3 rounded-2xl bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p> : null}
         </section>
 
-        <section className="relative mt-3 flex min-h-0 flex-1 overflow-hidden rounded-2xl border border-[#2196f3]/20 bg-white/95 shadow-[0_14px_32px_rgba(33,150,243,0.14)] sm:mt-4 sm:min-h-0">
+        <section className={`${PANEL_CLASS} relative mt-3 flex min-h-0 flex-1 overflow-hidden sm:mt-4 sm:min-h-0`}>
           <div className="h-full w-full overflow-auto pr-1" ref={scrollContainerRef}>
             <table className="table-fixed text-left text-sm" ref={tableRef} style={tableStyle}>
-              <thead className="sticky top-0 z-10 bg-[#e8f3ff] text-xs uppercase tracking-wide text-[#1b5fa6]">
+              <thead className="sticky top-0 z-10 bg-[#eef7f3]/95 text-xs uppercase tracking-[0.18em] text-[#56716a] backdrop-blur">
                 <tr>
                   {visibleColumnDefs.map((column) => {
                     return (
                       <th
-                        className="group relative border-r border-[#2196f3]/20 px-3 py-3 last:border-r-0"
+                        className="group relative border-r border-[#d8e5df] px-3 py-3 last:border-r-0"
                         key={column.key}
                         style={{ width: `var(${getColumnCssVarName(column.key)})`, minWidth: `${column.minWidth}px` }}
                       >
@@ -1484,7 +1578,7 @@ export function QuestionBankPage() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td className="px-3 py-6 text-sm text-slate-500" colSpan={visibleColumnDefs.length}>
+                    <td className="px-3 py-6 text-sm text-[#617a73]" colSpan={visibleColumnDefs.length}>
                       题库加载中...
                     </td>
                   </tr>
@@ -1492,7 +1586,7 @@ export function QuestionBankPage() {
 
                 {!loading && filteredRows.length === 0 ? (
                   <tr>
-                    <td className="px-3 py-6 text-sm text-slate-500" colSpan={visibleColumnDefs.length}>
+                    <td className="px-3 py-6 text-sm text-[#617a73]" colSpan={visibleColumnDefs.length}>
                       没有匹配数据
                     </td>
                   </tr>
@@ -1510,7 +1604,7 @@ export function QuestionBankPage() {
 
                       return (
                         <tr
-                          className="border-t border-[#2196f3]/12 align-top transition-colors hover:bg-[#2196f3]/[0.04]"
+                          className="border-t border-[#e1ebe7] align-top transition-colors odd:bg-white even:bg-[#fbfdfc] hover:bg-[#eef7f3]"
                           key={`${row.item.question}-${row.originalIndex}`}
                           style={{ height: `${VIRTUAL_ROW_HEIGHT}px` }}
                         >
@@ -1530,7 +1624,7 @@ export function QuestionBankPage() {
           </div>
 
           <button
-            className="absolute bottom-3 right-3 z-30 inline-flex items-center gap-2 rounded-full border border-[#2196f3]/40 bg-white/90 px-3 py-2 text-sm font-semibold text-[#0f4f90] shadow-[0_8px_18px_rgba(33,150,243,0.2)] backdrop-blur transition hover:border-[#2196f3] hover:bg-[#eaf4ff]"
+            className="absolute bottom-3 right-3 z-30 inline-flex items-center gap-2 rounded-full border border-[#cfe0d9] bg-white/92 px-3 py-2 text-sm font-semibold text-[#175549] shadow-[0_10px_24px_rgba(20,71,60,0.14)] backdrop-blur transition hover:border-[#aacdbf] hover:bg-[#f4faf7]"
             type="button"
             onClick={() => {
               setShuffleTick((value) => value + 1)
