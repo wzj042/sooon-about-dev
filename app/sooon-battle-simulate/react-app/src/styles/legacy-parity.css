@@ -79,7 +79,7 @@
 /* ==================== 椤甸潰涓讳綋鏍峰紡 ==================== */
 body {
   /* 浣跨敤绯荤粺瀛椾綋鏍堬紝纭繚璺ㄥ钩鍙颁竴鑷存€?*/
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', Arial, sans-serif;
   /* 娴呯伆鑹茶儗鏅紝鎻愪緵鑹ソ鐨勫姣斿害 */
   background: #f0f0f0;
   /* 纭繚椤甸潰鑷冲皯鍗犳弧鏁翠釜瑙嗗彛楂樺害 */

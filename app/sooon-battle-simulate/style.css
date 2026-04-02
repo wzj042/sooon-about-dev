@@ -79,7 +79,7 @@
 /* ==================== 页面主体样式 ==================== */
 body {
   /* 使用系统字体栈，确保跨平台一致性 */
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', Arial, sans-serif;
   /* 浅灰色背景，提供良好的对比度 */
   background: #f0f0f0;
   /* 确保页面至少占满整个视口高度 */
