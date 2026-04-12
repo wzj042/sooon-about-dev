@@ -115,20 +115,22 @@ function normalizeQuestion(question: string, raw: RawQuestionPayload): QuestionI
 
 function parseObjectPayload(payload: Record<string, RawQuestionPayload>): QuestionItem[] {
   return Object.entries(payload)
-    .map(([question, raw]) => normalizeQuestion(question, raw))
+    .map(([question, raw]) => shuffleQuestionOptions(normalizeQuestion(question, raw)))
     .filter(isValidQuestion)
 }
 
 function parseArrayPayload(payload: RawQuestionArrayPayload[]): QuestionItem[] {
   return payload
     .map((raw) =>
-      normalizeQuestion(typeof raw.question === 'string' ? raw.question : '', {
-        options: raw.options,
-        answer: raw.answer,
-        type: raw.type,
-        updated_at: raw.updated_at,
-        updatedAt: raw.updatedAt,
-      }),
+      shuffleQuestionOptions(
+        normalizeQuestion(typeof raw.question === 'string' ? raw.question : '', {
+          options: raw.options,
+          answer: raw.answer,
+          type: raw.type,
+          updated_at: raw.updated_at,
+          updatedAt: raw.updatedAt,
+        }),
+      ),
     )
     .filter(isValidQuestion)
 }
@@ -827,19 +829,42 @@ export function shuffle<T>(array: T[]): T[] {
   return copy
 }
 
+export function shuffleQuestionOptions(
+  question: QuestionItem,
+  shuffleFn: <T>(array: T[]) => T[] = shuffle,
+): QuestionItem {
+  const originalOptions = question.options.slice(0, 4)
+  if (originalOptions.length !== 4) {
+    return {
+      ...question,
+      options: originalOptions,
+    }
+  }
+
+  const indexedOptions = originalOptions.map((option, index) => ({
+    option,
+    index,
+  }))
+  const shuffledOptions = shuffleFn(indexedOptions)
+  const correctAnswer = shuffledOptions.findIndex((entry) => entry.index === question.answer)
+
+  return {
+    ...question,
+    options: shuffledOptions.map((entry) => entry.option),
+    answer: correctAnswer >= 0 ? correctAnswer : question.answer,
+  }
+}
+
 export function buildRoundQuestion(question: QuestionItem): {
   question: string
   options: string[]
   correctAnswer: number
 } {
-  const originalOptions = question.options.slice(0, 4)
-  const correctText = originalOptions[question.answer]
-  const shuffled = shuffle(originalOptions)
-  const correctAnswer = shuffled.findIndex((option) => option === correctText)
+  const shuffledQuestion = shuffleQuestionOptions(question)
 
   return {
-    question: question.question,
-    options: shuffled,
-    correctAnswer,
+    question: shuffledQuestion.question,
+    options: shuffledQuestion.options,
+    correctAnswer: shuffledQuestion.answer,
   }
 }
