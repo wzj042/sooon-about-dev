@@ -568,6 +568,10 @@ export function QuestionBankPage() {
   const [scrollTop, setScrollTop] = useState(0)
   const [viewportHeight, setViewportHeight] = useState(VIRTUAL_FALLBACK_VIEWPORT_HEIGHT)
   const deferredRows = useDeferredValue(rows)
+  const handleSortModeChange = (nextSortMode: SortMode) => {
+    setSortMode(nextSortMode)
+    setShuffleTick(0)
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -1425,7 +1429,7 @@ export function QuestionBankPage() {
               <select
                 className={SELECT_CLASS}
                 value={sortMode}
-                onChange={(event) => setSortMode(event.target.value as SortMode)}
+                onChange={(event) => handleSortModeChange(event.target.value as SortMode)}
               >
                 <option value="updated_desc">更新时间: 新到旧</option>
                 <option value="updated_asc">更新时间: 旧到新</option>
