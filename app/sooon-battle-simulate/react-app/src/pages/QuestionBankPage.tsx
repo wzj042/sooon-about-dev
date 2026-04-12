@@ -33,6 +33,7 @@ const INITIAL_CACHE_PREVIEW_ROWS = 240
 const OPTIONS_REVEAL_SESSION_KEY = 'question-bank-options-reveal-map'
 const FILTER_STATE_STORAGE_KEY = 'question-bank-filter-state'
 const VISIBLE_COLUMNS_STORAGE_KEY = 'question-bank-visible-columns'
+const COLUMN_WIDTHS_STORAGE_KEY = 'question-bank-column-widths'
 const SUWEN_TYPE = '素问'
 const COMMON_SENSE_TYPE_VALUE = '__common_sense_non_suwen__'
 const COMMON_SENSE_TYPE_LABEL = '🌌常识合集'
@@ -356,6 +357,30 @@ function loadVisibleColumnsFromStorage(): Record<ColumnKey, boolean> {
   }
 }
 
+function loadColumnWidthsFromStorage(): Record<ColumnKey, number> {
+  if (typeof window === 'undefined') return buildDefaultColumnWidths()
+
+  try {
+    const raw = window.localStorage.getItem(COLUMN_WIDTHS_STORAGE_KEY)
+    if (!raw) return buildDefaultColumnWidths()
+
+    const parsed = JSON.parse(raw) as unknown
+    if (!parsed || typeof parsed !== 'object') return buildDefaultColumnWidths()
+
+    const next = buildDefaultColumnWidths()
+
+    for (const column of COLUMN_DEFINITIONS) {
+      const value = (parsed as Record<string, unknown>)[column.key]
+      if (typeof value !== 'number' || !Number.isFinite(value)) continue
+      next[column.key] = Math.max(column.minWidth, Math.round(value))
+    }
+
+    return next
+  } catch {
+    return buildDefaultColumnWidths()
+  }
+}
+
 function buildDefaultColumnWidths(): Record<ColumnKey, number> {
   return COLUMN_DEFINITIONS.reduce<Record<ColumnKey, number>>((accumulator, column) => {
     accumulator[column.key] = column.defaultWidth
@@ -583,7 +608,7 @@ export function QuestionBankPage() {
   const [statsMap, setStatsMap] = useState<QuestionStatsMap>({})
   const [optionsRevealMap, setOptionsRevealMap] = useState<Record<string, boolean>>(() => loadOptionsRevealStateFromSession())
   const [visibleColumns, setVisibleColumns] = useState<Record<ColumnKey, boolean>>(() => loadVisibleColumnsFromStorage())
-  const [columnWidths, setColumnWidths] = useState<Record<ColumnKey, number>>(() => buildDefaultColumnWidths())
+  const [columnWidths, setColumnWidths] = useState<Record<ColumnKey, number>>(() => loadColumnWidthsFromStorage())
   const [isResizingColumn, setIsResizingColumn] = useState(false)
   const [startingQueuePractice, setStartingQueuePractice] = useState(false)
 
@@ -771,6 +796,14 @@ export function QuestionBankPage() {
       // Ignore storage errors to avoid blocking table interactions.
     }
   }, [visibleColumns])
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(COLUMN_WIDTHS_STORAGE_KEY, JSON.stringify(columnWidths))
+    } catch {
+      // Ignore storage errors to avoid blocking table interactions.
+    }
+  }, [columnWidths])
 
   const normalizedKeyword = keyword.trim().toLowerCase()
 
