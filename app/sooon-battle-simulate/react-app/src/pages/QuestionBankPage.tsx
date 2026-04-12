@@ -29,12 +29,10 @@ const VIRTUAL_ROW_HEIGHT = 160
 const VIRTUAL_OVERSCAN = 6
 const VIRTUAL_FALLBACK_VIEWPORT_HEIGHT = 640
 const MAX_VIRTUAL_RENDER_ROWS = 28
-const MIN_TABLE_WIDTH_PX = 1200
 const INITIAL_CACHE_PREVIEW_ROWS = 240
 const OPTIONS_REVEAL_SESSION_KEY = 'question-bank-options-reveal-map'
 const FILTER_STATE_STORAGE_KEY = 'question-bank-filter-state'
 const VISIBLE_COLUMNS_STORAGE_KEY = 'question-bank-visible-columns'
-const COLUMN_WIDTHS_STORAGE_KEY = 'question-bank-column-widths'
 const SUWEN_TYPE = '素问'
 const COMMON_SENSE_TYPE_VALUE = '__common_sense_non_suwen__'
 const COMMON_SENSE_TYPE_LABEL = '🌌常识合集'
@@ -109,17 +107,17 @@ interface ColumnDefinition {
 }
 
 const COLUMN_DEFINITIONS: ColumnDefinition[] = [
-  { key: 'index', label: '#', defaultWidth: 88, minWidth: 72 },
-  { key: 'question', label: '题目', defaultWidth: 560, minWidth: 280 },
-  { key: 'answer', label: '答案', defaultWidth: 320, minWidth: 180 },
-  { key: 'options', label: '选项', defaultWidth: 520, minWidth: 260 },
-  { key: 'type', label: '类型', defaultWidth: 180, minWidth: 120 },
-  { key: 'updatedAt', label: '更新时间', defaultWidth: 200, minWidth: 160 },
-  { key: 'answeredAt', label: '最近作答时间', defaultWidth: 220, minWidth: 180 },
-  { key: 'responseMs', label: '最近用时', defaultWidth: 150, minWidth: 120 },
-  { key: 'accuracy', label: '正确率', defaultWidth: 130, minWidth: 110 },
-  { key: 'stats', label: '答题情况', defaultWidth: 250, minWidth: 180 },
-  { key: 'actions', label: '操作', defaultWidth: 130, minWidth: 120 },
+  { key: 'index', label: '#', defaultWidth: 88, minWidth: 60 },
+  { key: 'question', label: '题目', defaultWidth: 560, minWidth: 240 },
+  { key: 'answer', label: '答案', defaultWidth: 320, minWidth: 144 },
+  { key: 'options', label: '选项', defaultWidth: 520, minWidth: 220 },
+  { key: 'type', label: '类型', defaultWidth: 180, minWidth: 96 },
+  { key: 'updatedAt', label: '更新时间', defaultWidth: 200, minWidth: 128 },
+  { key: 'answeredAt', label: '最近作答时间', defaultWidth: 220, minWidth: 144 },
+  { key: 'responseMs', label: '最近用时', defaultWidth: 150, minWidth: 96 },
+  { key: 'accuracy', label: '正确率', defaultWidth: 130, minWidth: 88 },
+  { key: 'stats', label: '答题情况', defaultWidth: 250, minWidth: 144 },
+  { key: 'actions', label: '操作', defaultWidth: 130, minWidth: 96 },
 ]
 
 const COLUMN_DEFINITION_MAP = COLUMN_DEFINITIONS.reduce<Record<ColumnKey, ColumnDefinition>>((accumulator, column) => {
@@ -358,39 +356,11 @@ function loadVisibleColumnsFromStorage(): Record<ColumnKey, boolean> {
   }
 }
 
-function loadColumnWidthsFromStorage(): Record<ColumnKey, number> {
-  if (typeof window === 'undefined') {
-    return COLUMN_DEFINITIONS.reduce<Record<ColumnKey, number>>((accumulator, column) => {
-      accumulator[column.key] = column.defaultWidth
-      return accumulator
-    }, {} as Record<ColumnKey, number>)
-  }
-
-  try {
-    const raw = window.localStorage.getItem(COLUMN_WIDTHS_STORAGE_KEY)
-    const next = COLUMN_DEFINITIONS.reduce<Record<ColumnKey, number>>((accumulator, column) => {
-      accumulator[column.key] = column.defaultWidth
-      return accumulator
-    }, {} as Record<ColumnKey, number>)
-
-    if (!raw) return next
-
-    const parsed = JSON.parse(raw) as unknown
-    if (!parsed || typeof parsed !== 'object') return next
-
-    for (const column of COLUMN_DEFINITIONS) {
-      const value = (parsed as Record<string, unknown>)[column.key]
-      if (typeof value !== 'number' || !Number.isFinite(value)) continue
-      next[column.key] = Math.max(column.minWidth, Math.round(value))
-    }
-
-    return next
-  } catch {
-    return COLUMN_DEFINITIONS.reduce<Record<ColumnKey, number>>((accumulator, column) => {
-      accumulator[column.key] = column.defaultWidth
-      return accumulator
-    }, {} as Record<ColumnKey, number>)
-  }
+function buildDefaultColumnWidths(): Record<ColumnKey, number> {
+  return COLUMN_DEFINITIONS.reduce<Record<ColumnKey, number>>((accumulator, column) => {
+    accumulator[column.key] = column.defaultWidth
+    return accumulator
+  }, {} as Record<ColumnKey, number>)
 }
 
 function getColumnCssVarName(key: ColumnKey): string {
@@ -613,15 +583,13 @@ export function QuestionBankPage() {
   const [statsMap, setStatsMap] = useState<QuestionStatsMap>({})
   const [optionsRevealMap, setOptionsRevealMap] = useState<Record<string, boolean>>(() => loadOptionsRevealStateFromSession())
   const [visibleColumns, setVisibleColumns] = useState<Record<ColumnKey, boolean>>(() => loadVisibleColumnsFromStorage())
-  const [columnWidths, setColumnWidths] = useState<Record<ColumnKey, number>>(() => loadColumnWidthsFromStorage())
+  const [columnWidths, setColumnWidths] = useState<Record<ColumnKey, number>>(() => buildDefaultColumnWidths())
   const [isResizingColumn, setIsResizingColumn] = useState(false)
   const [startingQueuePractice, setStartingQueuePractice] = useState(false)
 
   const scrollContainerRef = useRef<HTMLDivElement | null>(null)
   const searchInputRef = useRef<HTMLInputElement | null>(null)
-  const tableRef = useRef<HTMLTableElement | null>(null)
-  const resizingColumnRef = useRef<{ key: ColumnKey; startX: number; startWidth: number; pendingWidth: number } | null>(null)
-  const resizeAnimationFrameRef = useRef<number | null>(null)
+  const resizingColumnRef = useRef<{ key: ColumnKey; startX: number; startWidth: number } | null>(null)
 
   const [scrollTop, setScrollTop] = useState(0)
   const [viewportHeight, setViewportHeight] = useState(VIRTUAL_FALLBACK_VIEWPORT_HEIGHT)
@@ -804,14 +772,6 @@ export function QuestionBankPage() {
     }
   }, [visibleColumns])
 
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(COLUMN_WIDTHS_STORAGE_KEY, JSON.stringify(columnWidths))
-    } catch {
-      // Ignore storage errors to avoid blocking table interactions.
-    }
-  }, [columnWidths])
-
   const normalizedKeyword = keyword.trim().toLowerCase()
 
   const preparedRows = useMemo(() => {
@@ -976,50 +936,18 @@ export function QuestionBankPage() {
 
       const definition = COLUMN_DEFINITION_MAP[activeResize.key]
       const nextWidth = Math.max(definition.minWidth, Math.round(activeResize.startWidth + (event.clientX - activeResize.startX)))
-      if (activeResize.pendingWidth === nextWidth) return
-
-      activeResize.pendingWidth = nextWidth
-
-      if (resizeAnimationFrameRef.current !== null) return
-      resizeAnimationFrameRef.current = window.requestAnimationFrame(() => {
-        resizeAnimationFrameRef.current = null
-        const currentResize = resizingColumnRef.current
-        if (!currentResize) return
-
-        const tableNode = tableRef.current
-        if (!tableNode) return
-
-        tableNode.style.setProperty(getColumnCssVarName(currentResize.key), `${currentResize.pendingWidth}px`)
-
-        let totalVisibleWidth = 0
-        for (const column of COLUMN_DEFINITIONS) {
-          if (!visibleColumns[column.key]) continue
-          if (column.key === currentResize.key) {
-            totalVisibleWidth += currentResize.pendingWidth
-            continue
-          }
-          totalVisibleWidth += getColumnWidthFromMap(column, columnWidths)
+      setColumnWidths((previous) => {
+        if (previous[activeResize.key] === nextWidth) return previous
+        return {
+          ...previous,
+          [activeResize.key]: nextWidth,
         }
-
-        tableNode.style.minWidth = `${Math.max(MIN_TABLE_WIDTH_PX, totalVisibleWidth)}px`
       })
     }
 
     const stopResizing = () => {
-      const activeResize = resizingColumnRef.current
-      if (!activeResize) return
-      setColumnWidths((previous) => {
-        if (previous[activeResize.key] === activeResize.pendingWidth) return previous
-        return {
-          ...previous,
-          [activeResize.key]: activeResize.pendingWidth,
-        }
-      })
+      if (!resizingColumnRef.current) return
       resizingColumnRef.current = null
-      if (resizeAnimationFrameRef.current !== null) {
-        window.cancelAnimationFrame(resizeAnimationFrameRef.current)
-        resizeAnimationFrameRef.current = null
-      }
       setIsResizingColumn(false)
     }
 
@@ -1031,13 +959,9 @@ export function QuestionBankPage() {
       window.removeEventListener('pointermove', handlePointerMove)
       window.removeEventListener('pointerup', stopResizing)
       window.removeEventListener('pointercancel', stopResizing)
-      if (resizeAnimationFrameRef.current !== null) {
-        window.cancelAnimationFrame(resizeAnimationFrameRef.current)
-        resizeAnimationFrameRef.current = null
-      }
       setIsResizingColumn(false)
     }
-  }, [columnWidths, visibleColumns])
+  }, [])
 
   const virtualWindow = useMemo(() => {
     if (loading || filteredRows.length === 0) {
@@ -1091,22 +1015,15 @@ export function QuestionBankPage() {
     return COLUMN_DEFINITIONS.filter((column) => visibleColumns[column.key])
   }, [visibleColumns])
 
-  const tableMinWidthPx = useMemo(() => {
-    const width = visibleColumnDefs.reduce((sum, column) => sum + getColumnWidthFromMap(column, columnWidths), 0)
-    return Math.max(MIN_TABLE_WIDTH_PX, width)
-  }, [columnWidths, visibleColumnDefs])
+  const tableWidthPx = visibleColumnDefs.reduce((sum, column) => sum + getColumnWidthFromMap(column, columnWidths), 0)
+  const tableStyle: React.CSSProperties & Record<string, string> = {
+    width: `${tableWidthPx}px`,
+    minWidth: `${tableWidthPx}px`,
+  }
 
-  const tableStyle = useMemo(() => {
-    const style: React.CSSProperties & Record<string, string> = {
-      minWidth: `${tableMinWidthPx}px`,
-    }
-
-    for (const column of COLUMN_DEFINITIONS) {
-      style[getColumnCssVarName(column.key)] = `${getColumnWidthFromMap(column, columnWidths)}px`
-    }
-
-    return style
-  }, [columnWidths, tableMinWidthPx])
+  for (const column of COLUMN_DEFINITIONS) {
+    tableStyle[getColumnCssVarName(column.key)] = `${getColumnWidthFromMap(column, columnWidths)}px`
+  }
 
   const toggleSearchScope = (scope: SearchScope) => {
     setSearchScopes((previous) => {
@@ -1141,13 +1058,14 @@ export function QuestionBankPage() {
   }
 
   const handleColumnResizeStart = (event: React.PointerEvent<HTMLDivElement>, key: ColumnKey) => {
-    const width = columnWidths[key] ?? COLUMN_DEFINITION_MAP[key].defaultWidth
+    const definition = COLUMN_DEFINITION_MAP[key]
+    const width = Math.max(definition.minWidth, Math.round(columnWidths[key] ?? definition.defaultWidth))
     resizingColumnRef.current = {
       key,
       startX: event.clientX,
       startWidth: width,
-      pendingWidth: width,
     }
+    event.currentTarget.setPointerCapture(event.pointerId)
     setIsResizingColumn(true)
     event.preventDefault()
     event.stopPropagation()
@@ -1221,25 +1139,22 @@ export function QuestionBankPage() {
   }
 
   const renderTableCell = (columnKey: ColumnKey, row: TableRow, displayIndex: number) => {
-    const minWidth = COLUMN_DEFINITION_MAP[columnKey].minWidth
-    const style = { width: `var(${getColumnCssVarName(columnKey)})`, minWidth: `${minWidth}px` }
-
     switch (columnKey) {
       case 'index':
         return (
-          <td className={`${TABLE_CELL_CLASS} whitespace-nowrap font-semibold text-[#0f6d59]`} key={columnKey} style={style}>
+          <td className={`${TABLE_CELL_CLASS} whitespace-nowrap font-semibold text-[#0f6d59]`} key={columnKey}>
             {displayIndex}
           </td>
         )
       case 'question':
         return (
-          <td className={`${TABLE_CELL_CLASS} text-[#173a31]`} key={columnKey} style={style}>
+          <td className={`${TABLE_CELL_CLASS} text-[#173a31]`} key={columnKey}>
             <div className="max-h-20 overflow-hidden whitespace-pre-wrap break-words leading-6">{row.item.question}</div>
           </td>
         )
       case 'answer':
         return (
-          <td className={`${TABLE_CELL_CLASS} text-[#45645b]`} key={columnKey} style={style}>
+          <td className={`${TABLE_CELL_CLASS} text-[#45645b]`} key={columnKey}>
             <div className="max-h-16 overflow-hidden whitespace-pre-wrap break-words leading-5">{buildAnswerText(row.item)}</div>
           </td>
         )
@@ -1251,7 +1166,6 @@ export function QuestionBankPage() {
             <td
               className={`${TABLE_CELL_CLASS} cursor-pointer`}
               key={columnKey}
-              style={style}
               title={isAnswerVisible ? '点击隐藏答案高亮' : '点击显示答案高亮'}
               onClick={() => toggleOptionReveal(row)}
             >
@@ -1274,7 +1188,7 @@ export function QuestionBankPage() {
         }
       case 'type':
         return (
-          <td className={`${TABLE_CELL_CLASS} whitespace-nowrap text-[#45645b]`} key={columnKey} style={style}>
+          <td className={`${TABLE_CELL_CLASS} whitespace-nowrap text-[#45645b]`} key={columnKey}>
             <span className="inline-flex rounded-full bg-[#eef6f2] px-2.5 py-0.5 text-xs font-semibold text-[#356056]">
               {row.normalizedType || '-'}
             </span>
@@ -1282,25 +1196,25 @@ export function QuestionBankPage() {
         )
       case 'updatedAt':
         return (
-          <td className={`${TABLE_CELL_CLASS} whitespace-nowrap text-[#45645b]`} key={columnKey} style={style}>
+          <td className={`${TABLE_CELL_CLASS} whitespace-nowrap text-[#45645b]`} key={columnKey}>
             {row.updatedAt ?? '-'}
           </td>
         )
       case 'answeredAt':
         return (
-          <td className={`${TABLE_CELL_CLASS} whitespace-nowrap text-[#45645b]`} key={columnKey} style={style}>
+          <td className={`${TABLE_CELL_CLASS} whitespace-nowrap text-[#45645b]`} key={columnKey}>
             {formatAnsweredAt(row.statEntry?.lastAnsweredAt ?? '')}
           </td>
         )
       case 'responseMs':
         return (
-          <td className={`${TABLE_CELL_CLASS} whitespace-nowrap text-[#45645b]`} key={columnKey} style={style}>
+          <td className={`${TABLE_CELL_CLASS} whitespace-nowrap text-[#45645b]`} key={columnKey}>
             {formatResponseMs(row.statEntry?.lastResponseMs ?? 0)}
           </td>
         )
       case 'accuracy':
         return (
-          <td className={`${TABLE_CELL_CLASS} whitespace-nowrap text-[#45645b]`} key={columnKey} style={style}>
+          <td className={`${TABLE_CELL_CLASS} whitespace-nowrap text-[#45645b]`} key={columnKey}>
             <span
               className={
                 row.accuracyRate !== null && row.accuracyRate >= 0.8
@@ -1316,13 +1230,13 @@ export function QuestionBankPage() {
         )
       case 'stats':
         return (
-          <td className={`${TABLE_CELL_CLASS} whitespace-nowrap text-[#45645b]`} key={columnKey} style={style}>
+          <td className={`${TABLE_CELL_CLASS} whitespace-nowrap text-[#45645b]`} key={columnKey}>
             {formatQuestionStat(row.statEntry)}
           </td>
         )
       case 'actions':
         return (
-          <td className={`${TABLE_CELL_CLASS} whitespace-nowrap text-[#45645b]`} key={columnKey} style={style}>
+          <td className={`${TABLE_CELL_CLASS} whitespace-nowrap text-[#45645b]`} key={columnKey}>
             <button
               className="rounded-full border border-[#cfe0d9] bg-[#f4faf7] px-3 py-1.5 text-xs font-semibold text-[#175549] transition hover:border-[#aecaBE] hover:bg-[#e7f4ef]"
               type="button"
@@ -1649,7 +1563,15 @@ export function QuestionBankPage() {
 
         <section className={`${PANEL_CLASS} ${tableSectionSpacingClass} relative flex min-h-0 flex-1 overflow-hidden sm:min-h-0`}>
           <div className="h-full w-full overflow-auto pr-1" ref={scrollContainerRef}>
-            <table className="table-fixed text-left text-sm" ref={tableRef} style={tableStyle}>
+            <table className="table-fixed text-left text-sm" style={tableStyle}>
+              <colgroup>
+                {visibleColumnDefs.map((column) => (
+                  <col
+                    key={column.key}
+                    style={{ width: `var(${getColumnCssVarName(column.key)})` }}
+                  />
+                ))}
+              </colgroup>
               <thead className="sticky top-0 z-10 bg-[#eef7f3]/95 text-xs uppercase tracking-[0.16em] text-[#56716a] backdrop-blur">
                 <tr>
                   {visibleColumnDefs.map((column) => {
@@ -1657,7 +1579,6 @@ export function QuestionBankPage() {
                       <th
                         className="group relative border-r border-[#d8e5df] px-3 py-2.5 last:border-r-0"
                         key={column.key}
-                        style={{ width: `var(${getColumnCssVarName(column.key)})`, minWidth: `${column.minWidth}px` }}
                       >
                         <span>{column.label}</span>
                         <div
