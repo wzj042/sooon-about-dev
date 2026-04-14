@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         Sooon.ai 多功能链接复制器 
+// @name         Sooon.ai 多功能链接复制器
 // @namespace    http://tampermonkey.net/
-// @version      5.5
-// @description  修复弹窗加载延迟导致加载慢的问题
+// @version      5.6
+// @description  修复判断来源异常而无法复制非素问来源文章链接的问题
 // @author       Gemini (Based on user feedback & repair)
 // @match        https://sooon.ai/**
 // @grant        GM_registerMenuCommand
@@ -72,7 +72,7 @@
         triggerButton.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, cancelable: true, view: unsafeWindow }));
 
         try {
-            const buttonTextToFind = targetType === 'sooon' ? '素问' : '来源';
+            const buttonTextToFind = targetType === 'sooon' ? '素问' : '知乎爱发电';
             let targetButtonClickable = null;
             for (let i = 0; i < 20; i++) {
                 await new Promise(resolve => setTimeout(resolve, 100));
@@ -80,7 +80,7 @@
                 if (dialogs.length > 0) {
                     const hoverDialog = dialogs[dialogs.length-1];
                     const buttons = hoverDialog.querySelectorAll('button');
-                    for (const btn of buttons) { if (btn.textContent.trim().includes(buttonTextToFind)) { targetButtonClickable = btn; break; } }
+                    for (const btn of buttons) { if (buttonTextToFind.includes(btn.textContent.trim())) { targetButtonClickable = btn; break; } }
                 }
                 if (targetButtonClickable) break;
             }
