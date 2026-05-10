@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom'
 import { APP_ROUTES } from '../app/paths'
 import {
   clearPracticeQueueSession,
-  loadLastPracticeQueueSession,
+  loadLastPracticeQueueSessionSummary,
   subscribePracticeQueueSession,
 } from '../services/practiceQueue'
 import {
@@ -113,10 +113,10 @@ export function HomePage() {
 
   useEffect(() => {
     const refreshQueueInfo = () => {
-      const session = loadLastPracticeQueueSession()
+      const session = loadLastPracticeQueueSessionSummary()
       if (session) {
         setLastQueueInfo({
-          count: session.questions.length,
+          count: session.count,
           cursor: session.cursor,
           practicedCount: session.practicedCount,
         })

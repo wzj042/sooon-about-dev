@@ -22,7 +22,7 @@ import {
   loadLastPracticeQueueSession,
   saveLastPracticeQueueSession,
 } from '../services/practiceQueue'
-import { loadQuestionStatsMap, setQuestionMastered } from '../services/questionStats'
+import { getQuestionStat, loadQuestionStatsMap, setQuestionMastered } from '../services/questionStats'
 import { detachDebugSettle, attachDebugSettle } from '../store/actions/debug'
 import { useGameStore } from '../store/gameStore'
 
@@ -170,8 +170,8 @@ export function QueuePracticePage() {
 
     const bootstrap = async () => {
       const shouldResumeQueue = new URLSearchParams(window.location.search).get('resumeQueue') === '1'
-      const lastSession = loadLastPracticeQueueSession()
-      let practiceQueue = [] as ReturnType<typeof consumePracticeQueue>
+      const lastSession = await loadLastPracticeQueueSession()
+      let practiceQueue: Awaited<ReturnType<typeof consumePracticeQueue>> = []
       let initialPracticedCount = 0
 
       if (shouldResumeQueue && lastSession) {
@@ -179,7 +179,7 @@ export function QueuePracticePage() {
         initialPracticedCount = lastSession.practicedCount
         saveLastPracticeQueueSession(practiceQueue, 0, initialPracticedCount)
       } else {
-        practiceQueue = consumePracticeQueue()
+        practiceQueue = await consumePracticeQueue()
         if (practiceQueue.length > 0) {
           saveLastPracticeQueueSession(practiceQueue, 0, 0)
         } else if (lastSession) {
@@ -236,7 +236,7 @@ export function QueuePracticePage() {
       return
     }
     const statsMap = loadQuestionStatsMap()
-    questionWasMasteredRef.current = statsMap[gameState.currentQuestion]?.mastered === true
+    questionWasMasteredRef.current = getQuestionStat(gameState.currentQuestion, statsMap)?.mastered === true
     setCurrentQuestionMastered(questionWasMasteredRef.current)
   }, [gameState.currentQuestion])
 

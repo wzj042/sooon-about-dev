@@ -1,4 +1,5 @@
 import type { QuestionItem } from '../domain/types'
+import { buildQuestionHash, isQuestionReference, type QuestionReference } from './questionIdentity'
 import { normalizePublicAssetUrl, toPublicUrl } from '../utils/publicAsset'
 
 interface RawQuestionPayload {
@@ -295,7 +296,7 @@ function openQuestionBankDb(): Promise<IDBDatabase> {
   questionBankDbPromise = new Promise((resolve, reject) => {
     const request = indexedDB.open(QUESTION_BANK_DB_NAME, QUESTION_BANK_DB_VERSION)
 
-    request.onupgradeneeded = () => {
+    request.onupgradeneeded = (event) => {
       const db = request.result
       const transaction = request.transaction
       if (!db.objectStoreNames.contains(QUESTION_STORE_NAME)) {
@@ -304,7 +305,7 @@ function openQuestionBankDb(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains(META_STORE_NAME)) {
         db.createObjectStore(META_STORE_NAME, { keyPath: 'key' })
       }
-      if (request.oldVersion < 2 && transaction) {
+      if (event.oldVersion < 2 && transaction) {
         transaction.objectStore(QUESTION_STORE_NAME).clear()
         transaction.objectStore(META_STORE_NAME).clear()
       }
@@ -561,6 +562,44 @@ function buildPoolFromQuestions(questions: QuestionItem[], requiredCount: number
   return shuffled.slice(0, targetPoolSize)
 }
 
+function buildQuestionReferenceLookups(questions: QuestionItem[]): {
+  byHash: Map<string, QuestionItem>
+  bySourceId: Map<string, QuestionItem>
+} {
+  const byHash = new Map<string, QuestionItem>()
+  const bySourceId = new Map<string, QuestionItem>()
+
+  for (const question of questions) {
+    const questionHash = buildQuestionHash(question.question)
+    if (questionHash.length > 0 && !byHash.has(questionHash)) {
+      byHash.set(questionHash, question)
+    }
+
+    const normalizedSourceId = typeof question.sourceId === 'string' ? question.sourceId.trim() : ''
+    if (normalizedSourceId.length > 0 && !bySourceId.has(normalizedSourceId)) {
+      bySourceId.set(normalizedSourceId, question)
+    }
+  }
+
+  return { byHash, bySourceId }
+}
+
+function resolveQuestionReferencesFromPool(references: QuestionReference[], questions: QuestionItem[]): QuestionItem[] {
+  if (references.length === 0 || questions.length === 0) return []
+
+  const { byHash, bySourceId } = buildQuestionReferenceLookups(questions)
+
+  return references.flatMap((reference) => {
+    const normalizedSourceId = typeof reference.sourceId === 'string' ? reference.sourceId.trim() : ''
+    const matched =
+      (normalizedSourceId.length > 0 ? bySourceId.get(normalizedSourceId) : null) ??
+      byHash.get(reference.questionHash) ??
+      null
+
+    return matched ? [matched] : []
+  })
+}
+
 async function tryLoadCachedQuestions(): Promise<QuestionItem[]> {
   const snapshot = await readCacheSnapshotSafe()
   return snapshot.questions
@@ -726,6 +765,24 @@ export async function loadCachedQuestionBank(): Promise<QuestionItem[]> {
 
 export async function loadCachedQuestionBankPreview(limit: number): Promise<QuestionItem[]> {
   return loadCachedQuestionsPreview(limit)
+}
+
+export async function resolveQuestionReferences(references: QuestionReference[]): Promise<QuestionItem[]> {
+  const normalizedReferences = references.filter(isQuestionReference)
+  if (normalizedReferences.length === 0) return []
+
+  const cached = await tryLoadCachedQuestions()
+  const resolvedFromCache = resolveQuestionReferencesFromPool(normalizedReferences, cached)
+  if (resolvedFromCache.length >= normalizedReferences.length) {
+    return resolvedFromCache
+  }
+
+  try {
+    const bank = await loadQuestionBank()
+    return resolveQuestionReferencesFromPool(normalizedReferences, bank)
+  } catch {
+    return resolvedFromCache
+  }
 }
 
 export async function loadQuestionBankCacheState(): Promise<QuestionBankCacheState> {
