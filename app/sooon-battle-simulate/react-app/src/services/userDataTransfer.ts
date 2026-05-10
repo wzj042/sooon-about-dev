@@ -113,7 +113,7 @@ function applyImportedItems(items: UserDataExportItem[]): void {
 export function exportUserData(): UserDataTransferResult {
   try {
     const payload = buildExportPayload()
-    triggerDownload(JSON.stringify(payload, null, 2), makeExportFileName())
+    triggerDownload(JSON.stringify(payload), makeExportFileName())
     return {
       ok: true,
       message: `导出成功，共 ${payload.items.length} 项`,
