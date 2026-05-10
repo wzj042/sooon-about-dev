@@ -11,8 +11,8 @@ const defaultSourceFile = path.join(projectRoot, 'public', 'assets', 'qb.json')
 const defaultOutputDir = path.join(projectRoot, 'public', 'assets', 'qb-pages')
 const defaultManifestFile = path.join(projectRoot, 'public', 'assets', 'qb.manifest.json')
 
-/** @typedef {{ options?: unknown; answer?: unknown; type?: unknown; updated_at?: unknown; updatedAt?: unknown }} RawQuestion */
-/** @typedef {{ question: string; options: string[]; answer: number; type?: string; updated_at?: string }} NormalizedQuestion */
+/** @typedef {{ options?: unknown; answer?: unknown; type?: unknown; deleted?: unknown; source_id?: unknown; sourceId?: unknown; updated_at?: unknown; updatedAt?: unknown }} RawQuestion */
+/** @typedef {{ question: string; options: string[]; answer: number; type?: string; deleted?: boolean; sourceId?: string; updated_at?: string }} NormalizedQuestion */
 
 /**
  * @typedef {object} CliOptions
@@ -217,6 +217,18 @@ function normalizeQuestion(question, raw) {
 
   if (typeof raw?.type === 'string') {
     normalized.type = raw.type
+  }
+
+  if (typeof raw?.deleted === 'boolean') {
+    normalized.deleted = raw.deleted
+  }
+
+  const sourceIdRaw = typeof raw?.sourceId === 'string' ? raw.sourceId : typeof raw?.source_id === 'string' ? raw.source_id : null
+  if (typeof sourceIdRaw === 'string') {
+    const trimmed = sourceIdRaw.trim()
+    if (trimmed.length > 0) {
+      normalized.sourceId = trimmed
+    }
   }
 
   const updatedAtRaw = typeof raw?.updated_at === 'string' ? raw.updated_at : typeof raw?.updatedAt === 'string' ? raw.updatedAt : null
