@@ -5,6 +5,9 @@ interface RawQuestionPayload {
   options?: unknown
   answer?: unknown
   type?: unknown
+  deleted?: unknown
+  source_id?: unknown
+  sourceId?: unknown
   updated_at?: unknown
   updatedAt?: unknown
 }
@@ -14,6 +17,9 @@ interface RawQuestionArrayPayload {
   options?: unknown
   answer?: unknown
   type?: unknown
+  deleted?: unknown
+  source_id?: unknown
+  sourceId?: unknown
   updated_at?: unknown
   updatedAt?: unknown
 }
@@ -74,7 +80,7 @@ const QUESTION_BANK_PAGE_PREFIX = toPublicUrl('assets/qb-pages/')
 const MIN_QUESTION_POOL_SIZE = 80
 
 const QUESTION_BANK_DB_NAME = 'sooon-question-bank'
-const QUESTION_BANK_DB_VERSION = 1
+const QUESTION_BANK_DB_VERSION = 2
 const QUESTION_STORE_NAME = 'questions'
 const META_STORE_NAME = 'meta'
 const META_KEY_MANIFEST_SIGNATURE = 'manifestSignature'
@@ -98,17 +104,42 @@ function isValidQuestion(item: QuestionItem): boolean {
   )
 }
 
+function normalizeDeletedFlag(value: unknown): boolean | undefined {
+  if (typeof value === 'boolean') return value
+  if (typeof value === 'number') {
+    if (value === 1) return true
+    if (value === 0) return false
+    return undefined
+  }
+  if (typeof value !== 'string') return undefined
+
+  const normalized = value.trim().toLowerCase()
+  if (normalized === 'true' || normalized === '1') return true
+  if (normalized === 'false' || normalized === '0') return false
+  return undefined
+}
+
+function normalizeSourceId(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const normalized = value.trim()
+  return normalized.length > 0 ? normalized : undefined
+}
+
 function normalizeQuestion(question: string, raw: RawQuestionPayload): QuestionItem {
   const options = Array.isArray(raw.options) ? raw.options.filter((value) => typeof value === 'string').slice(0, 4) : []
   const answer = Number(raw.answer ?? 0)
   const updatedAtRaw = typeof raw.updated_at === 'string' ? raw.updated_at : typeof raw.updatedAt === 'string' ? raw.updatedAt : null
   const updatedAt = typeof updatedAtRaw === 'string' ? updatedAtRaw.trim() : ''
+  const deleted = normalizeDeletedFlag(raw.deleted)
+  const sourceId = normalizeSourceId(raw.sourceId ?? raw.source_id)
 
   return {
     question,
     options,
     answer,
     type: typeof raw.type === 'string' ? raw.type : undefined,
+    deleted,
+    sourceId,
     updatedAt: updatedAt.length > 0 ? updatedAt : undefined,
   }
 }
@@ -127,6 +158,9 @@ function parseArrayPayload(payload: RawQuestionArrayPayload[]): QuestionItem[] {
           options: raw.options,
           answer: raw.answer,
           type: raw.type,
+          deleted: raw.deleted,
+          source_id: raw.source_id,
+          sourceId: raw.sourceId,
           updated_at: raw.updated_at,
           updatedAt: raw.updatedAt,
         }),
@@ -263,11 +297,16 @@ function openQuestionBankDb(): Promise<IDBDatabase> {
 
     request.onupgradeneeded = () => {
       const db = request.result
+      const transaction = request.transaction
       if (!db.objectStoreNames.contains(QUESTION_STORE_NAME)) {
         db.createObjectStore(QUESTION_STORE_NAME, { keyPath: 'question' })
       }
       if (!db.objectStoreNames.contains(META_STORE_NAME)) {
         db.createObjectStore(META_STORE_NAME, { keyPath: 'key' })
+      }
+      if (request.oldVersion < 2 && transaction) {
+        transaction.objectStore(QUESTION_STORE_NAME).clear()
+        transaction.objectStore(META_STORE_NAME).clear()
       }
     }
 

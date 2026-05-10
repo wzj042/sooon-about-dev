@@ -58,6 +58,8 @@ export interface QuestionItem {
   options: string[]
   answer: number
   type?: string
+  deleted?: boolean
+  sourceId?: string
   updatedAt?: string
 }
 

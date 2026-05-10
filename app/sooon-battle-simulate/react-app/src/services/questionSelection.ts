@@ -15,6 +15,10 @@ export const DEFAULT_QUESTION_SELECTION_COUNTS: QuestionSelectionCounts = {
   mastered_only: 0,
 }
 
+function isSelectableQuestion(item: QuestionItem): boolean {
+  return item.deleted !== true
+}
+
 function dedupeQuestionBank(bank: QuestionItem[]): QuestionItem[] {
   const used = new Set<string>()
   const deduped: QuestionItem[] = []
@@ -48,7 +52,7 @@ export function buildQuestionSelectionPool(
   statsMap: QuestionStatsMap,
   commonSenseSubtype = '',
 ): QuestionItem[] {
-  const deduped = dedupeQuestionBank(bank)
+  const deduped = dedupeQuestionBank(bank.filter(isSelectableQuestion))
 
   if (strategy === 'all_questions') return deduped
 
@@ -114,7 +118,7 @@ export function buildQuestionSelectionCounts(bank: QuestionItem[], statsMap: Que
 export function buildCommonSenseSubtypeCounts(bank: QuestionItem[]): CommonSenseSubtypeCounts {
   const counts: CommonSenseSubtypeCounts = {}
 
-  for (const item of dedupeQuestionBank(bank)) {
+  for (const item of dedupeQuestionBank(bank.filter(isSelectableQuestion))) {
     const normalizedType = normalizeType(item.type)
     if (normalizedType.length === 0 || normalizedType === '常识') continue
     if (!isCommonSenseType(normalizedType)) continue

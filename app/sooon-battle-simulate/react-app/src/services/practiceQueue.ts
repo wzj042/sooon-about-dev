@@ -41,8 +41,12 @@ function isValidQuestionItem(value: unknown): value is QuestionItem {
   )
 }
 
+function isPracticeableQuestionItem(value: unknown): value is QuestionItem {
+  return isValidQuestionItem(value) && value.deleted !== true
+}
+
 export function savePracticeQueue(questions: QuestionItem[]): number {
-  const normalized = questions.filter(isValidQuestionItem).slice(0, PRACTICE_QUEUE_MAX_ITEMS)
+  const normalized = questions.filter(isPracticeableQuestionItem).slice(0, PRACTICE_QUEUE_MAX_ITEMS)
   const payload: PracticeQueuePayload = {
     questions: normalized,
     createdAt: new Date().toISOString(),
@@ -91,7 +95,7 @@ export function consumePracticeQueue(): QuestionItem[] {
       // no-op
     }
 
-    return payload.questions.filter(isValidQuestionItem).slice(0, PRACTICE_QUEUE_MAX_ITEMS)
+    return payload.questions.filter(isPracticeableQuestionItem).slice(0, PRACTICE_QUEUE_MAX_ITEMS)
   }
 
   try {
@@ -112,7 +116,7 @@ export function consumePracticeQueue(): QuestionItem[] {
 
     // One extra read for React StrictMode double-invocation; then clear.
     sessionStorage.removeItem(PRACTICE_QUEUE_FALLBACK_KEY)
-    return fallbackQuestions.filter(isValidQuestionItem).slice(0, PRACTICE_QUEUE_MAX_ITEMS)
+    return fallbackQuestions.filter(isPracticeableQuestionItem).slice(0, PRACTICE_QUEUE_MAX_ITEMS)
   } catch {
     return []
   }
@@ -130,7 +134,7 @@ function normalizePracticedCount(practicedCount: number): number {
 }
 
 export function saveLastPracticeQueueSession(questions: QuestionItem[], cursor = 0, practicedCount = 0): number {
-  const normalized = questions.filter(isValidQuestionItem).slice(0, PRACTICE_QUEUE_MAX_ITEMS)
+  const normalized = questions.filter(isPracticeableQuestionItem).slice(0, PRACTICE_QUEUE_MAX_ITEMS)
   if (normalized.length <= 0) {
     try {
       localStorage.removeItem(LAST_PRACTICE_QUEUE_SESSION_KEY)
@@ -157,7 +161,7 @@ export function loadLastPracticeQueueSession(): { questions: QuestionItem[]; cur
   const payload = getJson<Partial<LastPracticeQueueSessionPayload>>(LAST_PRACTICE_QUEUE_SESSION_KEY, {})
   if (!Array.isArray(payload.questions)) return null
 
-  const questions = payload.questions.filter(isValidQuestionItem).slice(0, PRACTICE_QUEUE_MAX_ITEMS)
+  const questions = payload.questions.filter(isPracticeableQuestionItem).slice(0, PRACTICE_QUEUE_MAX_ITEMS)
   if (questions.length <= 0) return null
 
   const cursor = normalizeCursor(Number(payload.cursor ?? 0), questions.length)
