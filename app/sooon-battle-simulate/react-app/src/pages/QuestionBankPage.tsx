@@ -1580,19 +1580,6 @@ export function QuestionBankPage() {
               </select>
             </label>
 
-            <label className={FILTER_LABEL_CLASS}>
-              deleted 标记
-              <select
-                className={SELECT_CLASS}
-                value={deletedFilter}
-                onChange={(event) => setDeletedFilter(event.target.value as DeletedFilter)}
-              >
-                <option value="all">全部</option>
-                <option value="deleted_only">仅 deleted</option>
-                <option value="active_only">仅未 deleted</option>
-              </select>
-            </label>
-
             {selectedType === SUWEN_TYPE ? (
               <label className={FILTER_LABEL_CLASS}>
                 素问原文
