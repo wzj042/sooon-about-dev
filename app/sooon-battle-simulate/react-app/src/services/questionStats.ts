@@ -1,8 +1,8 @@
 import type { QuestionSelectionStrategy } from '../domain/types'
+import { buildQuestionHash, isQuestionHash } from './questionIdentity'
 import { getJson, setValue } from './storage'
 
 export interface QuestionStatEntry {
-  question: string
   seenCount: number
   answeredCount: number
   correctCount: number
@@ -47,7 +47,7 @@ export const STATS_BASED_STRATEGIES: QuestionSelectionStrategy[] = [
   'mastered_only',
 ]
 
-function normalizeStatEntry(question: string, raw: Partial<QuestionStatEntry> | null | undefined): QuestionStatEntry {
+function normalizeStatEntry(raw: Partial<QuestionStatEntry> | null | undefined): QuestionStatEntry {
   const seenCount = Number(raw?.seenCount ?? 0)
   const answeredCount = Number(raw?.answeredCount ?? 0)
   const correctCount = Number(raw?.correctCount ?? 0)
@@ -56,7 +56,6 @@ function normalizeStatEntry(question: string, raw: Partial<QuestionStatEntry> | 
   const lastResponseMs = Number(raw?.lastResponseMs ?? 0)
 
   return {
-    question,
     seenCount: Number.isFinite(seenCount) ? Math.max(0, Math.floor(seenCount)) : 0,
     answeredCount: Number.isFinite(answeredCount) ? Math.max(0, Math.floor(answeredCount)) : 0,
     correctCount: Number.isFinite(correctCount) ? Math.max(0, Math.floor(correctCount)) : 0,
@@ -69,17 +68,61 @@ function normalizeStatEntry(question: string, raw: Partial<QuestionStatEntry> | 
   }
 }
 
+function getStatsStorageKey(question: string): string {
+  return buildQuestionHash(question)
+}
+
 function emitQuestionStatsChanged(): void {
   window.dispatchEvent(new Event(QUESTION_STATS_CHANGED_EVENT))
 }
 
-export function loadQuestionStatsMap(): QuestionStatsMap {
-  const raw = getJson<Record<string, Partial<QuestionStatEntry>>>(QUESTION_STATS_STORAGE_KEY, {})
-  const normalized: QuestionStatsMap = {}
+function writeQuestionStatsMap(map: QuestionStatsMap, emitChanged: boolean): void {
+  setValue(QUESTION_STATS_STORAGE_KEY, map)
+  if (emitChanged) {
+    emitQuestionStatsChanged()
+  }
+}
 
-  for (const [question, entry] of Object.entries(raw)) {
-    if (typeof question !== 'string' || question.length === 0) continue
-    normalized[question] = normalizeStatEntry(question, entry)
+export function loadQuestionStatsMap(): QuestionStatsMap {
+  const raw = getJson<Record<string, Partial<QuestionStatEntry> & { question?: unknown }>>(QUESTION_STATS_STORAGE_KEY, {})
+  const normalized: QuestionStatsMap = {}
+  let shouldMigrate = false
+
+  for (const [storedKey, entry] of Object.entries(raw)) {
+    const legacyQuestion = typeof entry?.question === 'string' ? entry.question.trim() : ''
+    const normalizedStoredKey = storedKey.trim()
+    const normalizedKey = legacyQuestion.length > 0 ? getStatsStorageKey(legacyQuestion) : isQuestionHash(normalizedStoredKey) ? normalizedStoredKey : getStatsStorageKey(normalizedStoredKey)
+    if (normalizedKey.length === 0) continue
+    if (legacyQuestion.length > 0 || normalizedStoredKey !== normalizedKey) {
+      shouldMigrate = true
+    }
+
+    const previous = normalized[normalizedKey]
+    const nextEntry = normalizeStatEntry(entry)
+
+    if (!previous) {
+      normalized[normalizedKey] = nextEntry
+      continue
+    }
+
+    const nextIsNewer = nextEntry.updatedAt >= previous.updatedAt
+    const nextAnsweredLater = nextEntry.lastAnsweredAt >= previous.lastAnsweredAt
+
+    normalized[normalizedKey] = {
+      seenCount: previous.seenCount + nextEntry.seenCount,
+      answeredCount: previous.answeredCount + nextEntry.answeredCount,
+      correctCount: previous.correctCount + nextEntry.correctCount,
+      wrongCount: previous.wrongCount + nextEntry.wrongCount,
+      totalResponseMs: previous.totalResponseMs + nextEntry.totalResponseMs,
+      lastResponseMs: nextAnsweredLater ? nextEntry.lastResponseMs : previous.lastResponseMs,
+      lastAnsweredAt: nextAnsweredLater ? nextEntry.lastAnsweredAt : previous.lastAnsweredAt,
+      mastered: nextIsNewer ? nextEntry.mastered : previous.mastered,
+      updatedAt: nextIsNewer ? nextEntry.updatedAt : previous.updatedAt,
+    }
+  }
+
+  if (shouldMigrate) {
+    writeQuestionStatsMap(normalized, false)
   }
 
   return normalized
@@ -104,8 +147,7 @@ export function saveDailyQuestionStatsMap(map: DailyQuestionStatsMap): void {
 }
 
 export function saveQuestionStatsMap(map: QuestionStatsMap): void {
-  setValue(QUESTION_STATS_STORAGE_KEY, map)
-  emitQuestionStatsChanged()
+  writeQuestionStatsMap(map, true)
 }
 
 export function clearQuestionHistory(): void {
@@ -127,7 +169,9 @@ export function subscribeQuestionStats(handler: () => void): () => void {
 }
 
 export function getQuestionStat(question: string, map: QuestionStatsMap): QuestionStatEntry | null {
-  return map[question] ?? null
+  const storageKey = getStatsStorageKey(question.trim())
+  if (storageKey.length === 0) return null
+  return map[storageKey] ?? null
 }
 
 export function recordQuestionAttempt(params: RecordQuestionAttemptParams): void {
@@ -138,22 +182,25 @@ export function recordQuestionAttempt(params: RecordQuestionAttemptParams): void
   if (!answered) return
 
   const map = loadQuestionStatsMap()
-  const previous = map[question] ?? normalizeStatEntry(question, null)
+  const storageKey = getStatsStorageKey(question)
+  if (storageKey.length === 0) return
+
+  const previous = map[storageKey] ?? normalizeStatEntry(null)
 
   const correct = params.correct === true
   const responseMs = Number.isFinite(params.responseMs) ? Math.max(0, Math.floor(params.responseMs)) : 0
+  const now = new Date().toISOString()
 
-  map[question] = {
-    question,
+  map[storageKey] = {
     seenCount: previous.seenCount + 1,
     answeredCount: previous.answeredCount + 1,
     correctCount: previous.correctCount + (correct ? 1 : 0),
     wrongCount: previous.wrongCount + (!correct ? 1 : 0),
     totalResponseMs: previous.totalResponseMs + responseMs,
     lastResponseMs: responseMs,
-    lastAnsweredAt: new Date().toISOString(),
+    lastAnsweredAt: now,
     mastered: previous.mastered,
-    updatedAt: new Date().toISOString(),
+    updatedAt: now,
   }
 
   const dailyMap = loadDailyQuestionStatsMap()
@@ -174,8 +221,11 @@ export function setQuestionMastered(question: string, mastered: boolean): void {
   if (normalizedQuestion.length === 0) return
 
   const map = loadQuestionStatsMap()
-  const previous = map[normalizedQuestion] ?? normalizeStatEntry(normalizedQuestion, null)
-  map[normalizedQuestion] = {
+  const storageKey = getStatsStorageKey(normalizedQuestion)
+  if (storageKey.length === 0) return
+
+  const previous = map[storageKey] ?? normalizeStatEntry(null)
+  map[storageKey] = {
     ...previous,
     mastered,
     updatedAt: new Date().toISOString(),

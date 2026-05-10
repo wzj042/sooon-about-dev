@@ -14,6 +14,7 @@ import {
 import { savePracticeQueue } from '../services/practiceQueue'
 import {
   averageResponseMs,
+  getQuestionStat,
   loadQuestionStatsMap,
   setQuestionMastered,
   subscribeQuestionStats,
@@ -475,19 +476,23 @@ function areCacheStatesEqual(left: QuestionBankCacheState, right: QuestionBankCa
 }
 
 function prepareTableRows(sourceRows: QuestionItem[], statsMap: QuestionStatsMap): TableRow[] {
-  return sourceRows.map((item, originalIndex) => ({
-    item,
-    originalIndex,
-    normalizedType: normalizeTypeValue(item.type),
-    deleted: item.deleted === true,
-    updatedAt: getUpdatedAtValue(item),
-    updatedTimestamp: parseUpdatedTimestamp(getUpdatedAtValue(item)),
-    sourceId: normalizeSourceIdValue(item.sourceId),
-    sourceLink: buildSuwenShareUrl(item.sourceId),
-    statEntry: statsMap[item.question] ?? null,
-    lastAnsweredTimestamp: parseAnsweredTimestamp(statsMap[item.question]?.lastAnsweredAt ?? ''),
-    accuracyRate: getAccuracyRate(statsMap[item.question] ?? null),
-  }))
+  return sourceRows.map((item, originalIndex) => {
+    const statEntry = getQuestionStat(item.question, statsMap)
+
+    return {
+      item,
+      originalIndex,
+      normalizedType: normalizeTypeValue(item.type),
+      deleted: item.deleted === true,
+      updatedAt: getUpdatedAtValue(item),
+      updatedTimestamp: parseUpdatedTimestamp(getUpdatedAtValue(item)),
+      sourceId: normalizeSourceIdValue(item.sourceId),
+      sourceLink: buildSuwenShareUrl(item.sourceId),
+      statEntry,
+      lastAnsweredTimestamp: parseAnsweredTimestamp(statEntry?.lastAnsweredAt ?? ''),
+      accuracyRate: getAccuracyRate(statEntry),
+    }
+  })
 }
 
 function matchesTypeScopeFilters(row: TableRow, typeFilter: TypeFilter, statsFilterMode: StatsFilterMode): boolean {

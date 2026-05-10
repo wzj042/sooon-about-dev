@@ -40,7 +40,7 @@ import {
   type CommonSenseSubtypeCounts,
   type QuestionSelectionCounts,
 } from '../services/questionSelection'
-import { loadQuestionStatsMap, setQuestionMastered, subscribeQuestionStats } from '../services/questionStats'
+import { getQuestionStat, loadQuestionStatsMap, setQuestionMastered, subscribeQuestionStats } from '../services/questionStats'
 import { detachDebugSettle, attachDebugSettle } from '../store/actions/debug'
 import { useGameStore } from '../store/gameStore'
 
@@ -232,7 +232,7 @@ export function GamePage() {
       return
     }
     const statsMap = loadQuestionStatsMap()
-    questionWasMasteredRef.current = statsMap[gameState.currentQuestion]?.mastered === true
+    questionWasMasteredRef.current = getQuestionStat(gameState.currentQuestion, statsMap)?.mastered === true
   }, [gameState.currentQuestion])
 
   useEffect(() => {
