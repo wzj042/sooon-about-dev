@@ -43,7 +43,6 @@ const COMMON_SENSE_TYPE_VALUE = '__common_sense_non_suwen__'
 const COMMON_SENSE_TYPE_LABEL = '🌌常识合集'
 const TYPE_FILTERS: TypeFilter[] = ['all', 'with_type', 'without_type']
 const STATS_FILTERS: StatsFilterMode[] = ['all', 'wrong_only', 'unseen_only', 'unmastered_only', 'mastered_only']
-const DELETED_FILTERS: DeletedFilter[] = ['all', 'deleted_only', 'active_only']
 const SUWEN_SOURCE_FILTERS: SuwenSourceFilter[] = ['all', 'with_source', 'without_source']
 const SORT_MODES: SortMode[] = [
   'updated_desc',
@@ -60,7 +59,6 @@ const SORT_MODES: SortMode[] = [
 
 type TypeFilter = 'all' | 'with_type' | 'without_type'
 type StatsFilterMode = 'all' | 'wrong_only' | 'unseen_only' | 'unmastered_only' | 'mastered_only'
-type DeletedFilter = 'all' | 'deleted_only' | 'active_only'
 type SuwenSourceFilter = 'all' | 'with_source' | 'without_source'
 type SortMode =
   | 'updated_desc'
@@ -333,7 +331,6 @@ function loadFilterStateFromStorage(): {
   keyword?: string
   typeFilter?: TypeFilter
   statsFilterMode?: StatsFilterMode
-  deletedFilter?: DeletedFilter
   suwenSourceFilter?: SuwenSourceFilter
   selectedType?: string
   sortMode?: SortMode
@@ -353,7 +350,6 @@ function loadFilterStateFromStorage(): {
       keyword?: string
       typeFilter?: TypeFilter
       statsFilterMode?: StatsFilterMode
-      deletedFilter?: DeletedFilter
       suwenSourceFilter?: SuwenSourceFilter
       selectedType?: string
       sortMode?: SortMode
@@ -371,15 +367,6 @@ function loadFilterStateFromStorage(): {
     }
     if (typeof parsed.statsFilterMode === 'string' && STATS_FILTERS.includes(parsed.statsFilterMode as StatsFilterMode)) {
       next.statsFilterMode = parsed.statsFilterMode as StatsFilterMode
-    }
-    const deletedFilterValue =
-      typeof parsed.deletedFilter === 'string'
-        ? parsed.deletedFilter
-        : typeof parsed.suwenDeletedFilter === 'string'
-          ? parsed.suwenDeletedFilter
-          : null
-    if (typeof deletedFilterValue === 'string' && DELETED_FILTERS.includes(deletedFilterValue as DeletedFilter)) {
-      next.deletedFilter = deletedFilterValue as DeletedFilter
     }
     if (typeof parsed.suwenSourceFilter === 'string' && SUWEN_SOURCE_FILTERS.includes(parsed.suwenSourceFilter as SuwenSourceFilter)) {
       next.suwenSourceFilter = parsed.suwenSourceFilter as SuwenSourceFilter
@@ -519,12 +506,6 @@ function matchesSuwenSourceFilter(row: TableRow, selectedType: string, suwenSour
   if (selectedType !== SUWEN_TYPE || suwenSourceFilter === 'all') return true
   if (suwenSourceFilter === 'with_source') return hasSuwenSource(row)
   return !hasSuwenSource(row)
-}
-
-function matchesDeletedFilter(row: TableRow, deletedFilter: DeletedFilter): boolean {
-  if (deletedFilter === 'all') return true
-  if (deletedFilter === 'deleted_only') return row.deleted
-  return !row.deleted
 }
 
 function resolveActiveSearchScopes(scopes: Record<SearchScope, boolean>): Record<SearchScope, boolean> {
@@ -690,7 +671,6 @@ export function QuestionBankPage() {
   const [keyword, setKeyword] = useState(initialFilterState.keyword ?? '')
   const [typeFilter, setTypeFilter] = useState<TypeFilter>(initialFilterState.typeFilter ?? 'all')
   const [statsFilterMode, setStatsFilterMode] = useState<StatsFilterMode>(initialFilterState.statsFilterMode ?? 'all')
-  const [deletedFilter, setDeletedFilter] = useState<DeletedFilter>(initialFilterState.deletedFilter ?? 'all')
   const [suwenSourceFilter, setSuwenSourceFilter] = useState<SuwenSourceFilter>(initialFilterState.suwenSourceFilter ?? 'all')
   const [invertMatch, setInvertMatch] = useState(initialFilterState.invertMatch === true)
   const [selectedType, setSelectedType] = useState(initialFilterState.selectedType ?? 'all')
@@ -873,7 +853,6 @@ export function QuestionBankPage() {
           keyword,
           typeFilter,
           statsFilterMode,
-          deletedFilter,
           suwenSourceFilter,
           invertMatch,
           selectedType,
@@ -885,7 +864,7 @@ export function QuestionBankPage() {
     } catch {
       // Ignore storage errors to avoid blocking table interactions.
     }
-  }, [invertMatch, keyword, typeFilter, statsFilterMode, deletedFilter, suwenSourceFilter, selectedType, sortMode, selectedDate, searchScopes])
+  }, [invertMatch, keyword, typeFilter, statsFilterMode, suwenSourceFilter, selectedType, sortMode, selectedDate, searchScopes])
 
   useEffect(() => {
     try {
@@ -984,10 +963,9 @@ export function QuestionBankPage() {
     return typeScopedRows.filter(
       (row) =>
         matchesSelectedType(row, selectedType) &&
-        matchesDeletedFilter(row, deletedFilter) &&
         matchesSuwenSourceFilter(row, selectedType, suwenSourceFilter),
     )
-  }, [selectedType, deletedFilter, suwenSourceFilter, typeScopedRows])
+  }, [selectedType, suwenSourceFilter, typeScopedRows])
 
   const matchedRows = useMemo(() => {
     return buildFilteredRows({
@@ -1021,7 +999,7 @@ export function QuestionBankPage() {
       node.scrollTop = 0
     }
     setScrollTop(0)
-  }, [invertMatch, normalizedKeyword, searchScopes, selectedDate, selectedType, shuffleTick, sortMode, statsFilterMode, deletedFilter, suwenSourceFilter, typeFilter])
+  }, [invertMatch, normalizedKeyword, searchScopes, selectedDate, selectedType, shuffleTick, sortMode, statsFilterMode, suwenSourceFilter, typeFilter])
 
   useEffect(() => {
     const node = scrollContainerRef.current
