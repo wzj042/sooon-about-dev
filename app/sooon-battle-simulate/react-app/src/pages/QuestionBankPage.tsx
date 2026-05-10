@@ -24,6 +24,9 @@ import {
 const CACHE_POLL_DELAY_MS = 1200
 const MAX_CACHE_POLL_ROUNDS = 16
 const ANSWER_LABELS = ['A', 'B', 'C', 'D'] as const
+const BASE62_ALPHABET = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
+const BASE62 = 62n
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 const VIRTUAL_ROW_HEIGHT = 160
 const VIRTUAL_OVERSCAN = 6
@@ -39,6 +42,8 @@ const COMMON_SENSE_TYPE_VALUE = '__common_sense_non_suwen__'
 const COMMON_SENSE_TYPE_LABEL = '🌌常识合集'
 const TYPE_FILTERS: TypeFilter[] = ['all', 'with_type', 'without_type']
 const STATS_FILTERS: StatsFilterMode[] = ['all', 'wrong_only', 'unseen_only', 'unmastered_only', 'mastered_only']
+const DELETED_FILTERS: DeletedFilter[] = ['all', 'deleted_only', 'active_only']
+const SUWEN_SOURCE_FILTERS: SuwenSourceFilter[] = ['all', 'with_source', 'without_source']
 const SORT_MODES: SortMode[] = [
   'updated_desc',
   'updated_asc',
@@ -54,6 +59,8 @@ const SORT_MODES: SortMode[] = [
 
 type TypeFilter = 'all' | 'with_type' | 'without_type'
 type StatsFilterMode = 'all' | 'wrong_only' | 'unseen_only' | 'unmastered_only' | 'mastered_only'
+type DeletedFilter = 'all' | 'deleted_only' | 'active_only'
+type SuwenSourceFilter = 'all' | 'with_source' | 'without_source'
 type SortMode =
   | 'updated_desc'
   | 'updated_asc'
@@ -80,8 +87,11 @@ interface TableRow {
   item: QuestionItem
   originalIndex: number
   normalizedType: string
+  deleted: boolean
   updatedAt?: string
   updatedTimestamp: number | null
+  sourceId?: string
+  sourceLink: string | null
   statEntry: QuestionStatEntry | null
   lastAnsweredTimestamp: number | null
   accuracyRate: number | null
@@ -93,6 +103,7 @@ type ColumnKey =
   | 'answer'
   | 'options'
   | 'type'
+  | 'source'
   | 'updatedAt'
   | 'answeredAt'
   | 'responseMs'
@@ -113,6 +124,7 @@ const COLUMN_DEFINITIONS: ColumnDefinition[] = [
   { key: 'answer', label: '答案', defaultWidth: 320, minWidth: 144 },
   { key: 'options', label: '选项', defaultWidth: 520, minWidth: 220 },
   { key: 'type', label: '类型', defaultWidth: 180, minWidth: 96 },
+  { key: 'source', label: '原文', defaultWidth: 150, minWidth: 110 },
   { key: 'updatedAt', label: '更新时间', defaultWidth: 200, minWidth: 128 },
   { key: 'answeredAt', label: '最近作答时间', defaultWidth: 220, minWidth: 144 },
   { key: 'responseMs', label: '最近用时', defaultWidth: 150, minWidth: 96 },
@@ -131,7 +143,8 @@ const DEFAULT_VISIBLE_COLUMNS: Record<ColumnKey, boolean> = {
   question: true,
   answer: true,
   options: true,
-  type: false,
+  type: true,
+  source: true,
   updatedAt: false,
   answeredAt: true,
   responseMs: false,
@@ -181,6 +194,47 @@ function getUpdatedAtValue(item: QuestionItem): string | undefined {
   }
 
   return undefined
+}
+
+function normalizeSourceIdValue(sourceId?: string): string | undefined {
+  if (typeof sourceId !== 'string') return undefined
+  const trimmed = sourceId.trim()
+  return trimmed.length > 0 ? trimmed : undefined
+}
+
+function uuidToBytes(uuid: string): Uint8Array {
+  const hex = uuid.replace(/-/g, '')
+  const bytes = new Uint8Array(16)
+  for (let index = 0; index < 16; index += 1) {
+    bytes[index] = Number.parseInt(hex.slice(index * 2, index * 2 + 2), 16)
+  }
+  return bytes
+}
+
+function base62Encode(bytes: Uint8Array): string {
+  let value = 0n
+  for (const byte of bytes) {
+    value = (value << 8n) | BigInt(byte)
+  }
+
+  if (value === 0n) return BASE62_ALPHABET[0]
+
+  let result = ''
+  while (value > 0n) {
+    result = BASE62_ALPHABET[Number(value % BASE62)] + result
+    value /= BASE62
+  }
+
+  return result
+}
+
+function buildSuwenShareUrl(sourceId?: string): string | null {
+  const normalizedSourceId = normalizeSourceIdValue(sourceId)
+  if (!normalizedSourceId || !UUID_PATTERN.test(normalizedSourceId) || typeof window === 'undefined') {
+    return null
+  }
+
+  return `https://sooon.ai/p/s/${base62Encode(uuidToBytes(normalizedSourceId))}`
 }
 
 function buildAnswerText(item: QuestionItem): string {
@@ -278,6 +332,8 @@ function loadFilterStateFromStorage(): {
   keyword?: string
   typeFilter?: TypeFilter
   statsFilterMode?: StatsFilterMode
+  deletedFilter?: DeletedFilter
+  suwenSourceFilter?: SuwenSourceFilter
   selectedType?: string
   sortMode?: SortMode
   selectedDate?: string
@@ -296,6 +352,8 @@ function loadFilterStateFromStorage(): {
       keyword?: string
       typeFilter?: TypeFilter
       statsFilterMode?: StatsFilterMode
+      deletedFilter?: DeletedFilter
+      suwenSourceFilter?: SuwenSourceFilter
       selectedType?: string
       sortMode?: SortMode
       selectedDate?: string
@@ -312,6 +370,18 @@ function loadFilterStateFromStorage(): {
     }
     if (typeof parsed.statsFilterMode === 'string' && STATS_FILTERS.includes(parsed.statsFilterMode as StatsFilterMode)) {
       next.statsFilterMode = parsed.statsFilterMode as StatsFilterMode
+    }
+    const deletedFilterValue =
+      typeof parsed.deletedFilter === 'string'
+        ? parsed.deletedFilter
+        : typeof parsed.suwenDeletedFilter === 'string'
+          ? parsed.suwenDeletedFilter
+          : null
+    if (typeof deletedFilterValue === 'string' && DELETED_FILTERS.includes(deletedFilterValue as DeletedFilter)) {
+      next.deletedFilter = deletedFilterValue as DeletedFilter
+    }
+    if (typeof parsed.suwenSourceFilter === 'string' && SUWEN_SOURCE_FILTERS.includes(parsed.suwenSourceFilter as SuwenSourceFilter)) {
+      next.suwenSourceFilter = parsed.suwenSourceFilter as SuwenSourceFilter
     }
     if (typeof parsed.sortMode === 'string' && SORT_MODES.includes(parsed.sortMode as SortMode)) {
       next.sortMode = parsed.sortMode as SortMode
@@ -409,8 +479,11 @@ function prepareTableRows(sourceRows: QuestionItem[], statsMap: QuestionStatsMap
     item,
     originalIndex,
     normalizedType: normalizeTypeValue(item.type),
+    deleted: item.deleted === true,
     updatedAt: getUpdatedAtValue(item),
     updatedTimestamp: parseUpdatedTimestamp(getUpdatedAtValue(item)),
+    sourceId: normalizeSourceIdValue(item.sourceId),
+    sourceLink: buildSuwenShareUrl(item.sourceId),
     statEntry: statsMap[item.question] ?? null,
     lastAnsweredTimestamp: parseAnsweredTimestamp(statsMap[item.question]?.lastAnsweredAt ?? ''),
     accuracyRate: getAccuracyRate(statsMap[item.question] ?? null),
@@ -431,6 +504,22 @@ function matchesSelectedType(row: TableRow, selectedType: string): boolean {
   if (selectedType === 'all') return true
   if (selectedType === COMMON_SENSE_TYPE_VALUE) return row.normalizedType !== SUWEN_TYPE
   return row.normalizedType === selectedType
+}
+
+function hasSuwenSource(row: TableRow): boolean {
+  return (typeof row.sourceId === 'string' && row.sourceId.length > 0) || typeof row.sourceLink === 'string'
+}
+
+function matchesSuwenSourceFilter(row: TableRow, selectedType: string, suwenSourceFilter: SuwenSourceFilter): boolean {
+  if (selectedType !== SUWEN_TYPE || suwenSourceFilter === 'all') return true
+  if (suwenSourceFilter === 'with_source') return hasSuwenSource(row)
+  return !hasSuwenSource(row)
+}
+
+function matchesDeletedFilter(row: TableRow, deletedFilter: DeletedFilter): boolean {
+  if (deletedFilter === 'all') return true
+  if (deletedFilter === 'deleted_only') return row.deleted
+  return !row.deleted
 }
 
 function resolveActiveSearchScopes(scopes: Record<SearchScope, boolean>): Record<SearchScope, boolean> {
@@ -596,6 +685,8 @@ export function QuestionBankPage() {
   const [keyword, setKeyword] = useState(initialFilterState.keyword ?? '')
   const [typeFilter, setTypeFilter] = useState<TypeFilter>(initialFilterState.typeFilter ?? 'all')
   const [statsFilterMode, setStatsFilterMode] = useState<StatsFilterMode>(initialFilterState.statsFilterMode ?? 'all')
+  const [deletedFilter, setDeletedFilter] = useState<DeletedFilter>(initialFilterState.deletedFilter ?? 'all')
+  const [suwenSourceFilter, setSuwenSourceFilter] = useState<SuwenSourceFilter>(initialFilterState.suwenSourceFilter ?? 'all')
   const [invertMatch, setInvertMatch] = useState(initialFilterState.invertMatch === true)
   const [selectedType, setSelectedType] = useState(initialFilterState.selectedType ?? 'all')
   const [sortMode, setSortMode] = useState<SortMode>(initialFilterState.sortMode ?? 'updated_desc')
@@ -777,6 +868,8 @@ export function QuestionBankPage() {
           keyword,
           typeFilter,
           statsFilterMode,
+          deletedFilter,
+          suwenSourceFilter,
           invertMatch,
           selectedType,
           sortMode,
@@ -787,7 +880,7 @@ export function QuestionBankPage() {
     } catch {
       // Ignore storage errors to avoid blocking table interactions.
     }
-  }, [invertMatch, keyword, typeFilter, statsFilterMode, selectedType, sortMode, selectedDate, searchScopes])
+  }, [invertMatch, keyword, typeFilter, statsFilterMode, deletedFilter, suwenSourceFilter, selectedType, sortMode, selectedDate, searchScopes])
 
   useEffect(() => {
     try {
@@ -883,8 +976,13 @@ export function QuestionBankPage() {
   }, [availableDateSet, selectedDate])
 
   const selectedTypeRows = useMemo(() => {
-    return typeScopedRows.filter((row) => matchesSelectedType(row, selectedType))
-  }, [selectedType, typeScopedRows])
+    return typeScopedRows.filter(
+      (row) =>
+        matchesSelectedType(row, selectedType) &&
+        matchesDeletedFilter(row, deletedFilter) &&
+        matchesSuwenSourceFilter(row, selectedType, suwenSourceFilter),
+    )
+  }, [selectedType, deletedFilter, suwenSourceFilter, typeScopedRows])
 
   const matchedRows = useMemo(() => {
     return buildFilteredRows({
@@ -918,7 +1016,7 @@ export function QuestionBankPage() {
       node.scrollTop = 0
     }
     setScrollTop(0)
-  }, [invertMatch, normalizedKeyword, searchScopes, selectedDate, selectedType, shuffleTick, sortMode, statsFilterMode, typeFilter])
+  }, [invertMatch, normalizedKeyword, searchScopes, selectedDate, selectedType, shuffleTick, sortMode, statsFilterMode, deletedFilter, suwenSourceFilter, typeFilter])
 
   useEffect(() => {
     const node = scrollContainerRef.current
@@ -1115,7 +1213,9 @@ export function QuestionBankPage() {
       case 'options':
         return row.item.options.map((option, optionIndex) => `${ANSWER_LABELS[optionIndex]}. ${option}`).join(' | ')
       case 'type':
-        return row.normalizedType || '-'
+        return [row.normalizedType || '-', row.deleted ? 'deleted' : ''].filter(Boolean).join(' | ')
+      case 'source':
+        return row.sourceLink ?? row.sourceId ?? '-'
       case 'updatedAt':
         return row.updatedAt ?? '-'
       case 'answeredAt':
@@ -1221,10 +1321,45 @@ export function QuestionBankPage() {
         }
       case 'type':
         return (
+          <td className={`${TABLE_CELL_CLASS} text-[#45645b]`} key={columnKey}>
+            <div className="flex flex-wrap gap-1.5">
+              <span className="inline-flex rounded-full bg-[#eef6f2] px-2.5 py-0.5 text-xs font-semibold text-[#356056]">
+                {row.normalizedType || '-'}
+              </span>
+              {row.deleted ? (
+                <span
+                  className="inline-flex rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-800"
+                  title="素问中可能已移除的题目"
+                >
+                  deleted
+                </span>
+              ) : null}
+            </div>
+          </td>
+        )
+      case 'source':
+        return (
           <td className={`${TABLE_CELL_CLASS} whitespace-nowrap text-[#45645b]`} key={columnKey}>
-            <span className="inline-flex rounded-full bg-[#eef6f2] px-2.5 py-0.5 text-xs font-semibold text-[#356056]">
-              {row.normalizedType || '-'}
-            </span>
+            {row.sourceLink ? (
+              <a
+                className="inline-flex rounded-full border border-[#cfe0d9] bg-[#f4faf7] px-3 py-1.5 text-xs font-semibold text-[#175549] transition hover:border-[#aecabe] hover:bg-[#e7f4ef]"
+                href={row.sourceLink}
+                rel="noopener noreferrer"
+                target="_blank"
+                title={row.sourceId}
+              >
+                查看原文
+              </a>
+            ) : hasSuwenSource(row) ? (
+              <span
+                className="inline-flex rounded-full border border-[#d9d7cf] bg-[#faf8f2] px-3 py-1.5 text-xs font-semibold text-[#7a5f1f]"
+                title={row.sourceId ?? '原文标识存在，但链接不可用'}
+              >
+                仅原文ID
+              </span>
+            ) : (
+              '-'
+            )}
           </td>
         )
       case 'updatedAt':
@@ -1444,6 +1579,34 @@ export function QuestionBankPage() {
                 ))}
               </select>
             </label>
+
+            <label className={FILTER_LABEL_CLASS}>
+              deleted 标记
+              <select
+                className={SELECT_CLASS}
+                value={deletedFilter}
+                onChange={(event) => setDeletedFilter(event.target.value as DeletedFilter)}
+              >
+                <option value="all">全部</option>
+                <option value="deleted_only">仅 deleted</option>
+                <option value="active_only">仅未 deleted</option>
+              </select>
+            </label>
+
+            {selectedType === SUWEN_TYPE ? (
+              <label className={FILTER_LABEL_CLASS}>
+                素问原文
+                <select
+                  className={SELECT_CLASS}
+                  value={suwenSourceFilter}
+                  onChange={(event) => setSuwenSourceFilter(event.target.value as SuwenSourceFilter)}
+                >
+                  <option value="all">全部</option>
+                  <option value="with_source">仅有原文</option>
+                  <option value="without_source">仅无原文</option>
+                </select>
+              </label>
+            ) : null}
 
             <label className={FILTER_LABEL_CLASS}>
               排序

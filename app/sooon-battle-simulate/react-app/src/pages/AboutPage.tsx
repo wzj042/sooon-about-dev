@@ -272,6 +272,37 @@ export function AboutPage() {
                 的抢答对战模拟器，旨在提供一个可随时练习抢答节奏、刷题和复盘统计的工具。
               </p>
               <p>题目通过 `type` 字段区分来源，`type` 为“素问”的题目归入素问题目，其余题目归入常识题目。</p>
+              <div className="rounded-[24px] border border-[#0f7b66]/10 bg-[#f7fcfa] p-5">
+                <h3 className="text-base font-semibold text-[#17392f]">题库字段说明</h3>
+                <div className="mt-3 overflow-hidden rounded-2xl border border-[#d9e8e1] bg-white">
+                  <table className="w-full table-fixed text-left text-sm text-[#4d6760]">
+                    <thead className="bg-[#f3faf7] text-xs uppercase tracking-[0.18em] text-[#6a817a]">
+                      <tr>
+                        <th className="px-4 py-3 font-semibold">字段</th>
+                        <th className="px-4 py-3 font-semibold">类型</th>
+                        <th className="px-4 py-3 font-semibold">说明</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr className="border-t border-[#eef4f1]">
+                        <td className="px-4 py-3 font-mono text-xs text-[#17392f]">type</td>
+                        <td className="px-4 py-3">string</td>
+                        <td className="px-4 py-3">题目来源类型，`素问` 表示素问题目，其余类型归入常识题目。</td>
+                      </tr>
+                      <tr className="border-t border-[#eef4f1]">
+                        <td className="px-4 py-3 font-mono text-xs text-[#17392f]">deleted</td>
+                        <td className="px-4 py-3">boolean</td>
+                        <td className="px-4 py-3">素问中可能已移除的题目，默认不会进入模拟练习。</td>
+                      </tr>
+                      <tr className="border-t border-[#eef4f1]">
+                        <td className="px-4 py-3 font-mono text-xs text-[#17392f]">sourceId</td>
+                        <td className="px-4 py-3">string</td>
+                        <td className="px-4 py-3">素问题目的原文 ID，可在题库表的“原文”列中打开对应分享页。</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
               <blockquote className="rounded-[20px] border border-[#0f7b66]/10 bg-[#f7fcfa] px-4 py-3 text-[#5d756d]">
                 2025-09-26 前存量爬取的 1485 题为 AI 预筛后手动分类，可能存在误判错漏，欢迎通过 Github issue 反馈。
               </blockquote>
