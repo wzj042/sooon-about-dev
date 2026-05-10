@@ -17,9 +17,33 @@ export interface UserDataTransferResult {
 
 const EXPORTED_FILE_PREFIX = 'sooon-user-data'
 
+const ALLOWED_KEY_PREFIXES = ['sooon-', 'question-bank-'] as const
+const ALLOWED_EXACT_KEYS = new Set([
+  'aiSpeedMin',
+  'aiSpeedMax',
+  'aiAccuracy',
+  'avatarFixed',
+  'autoSkipEndScreen',
+  'playerId',
+  'opponentId',
+  'optionWrapChars',
+  'titleSpacingPx',
+  'titleWrapChars',
+  'questionSelectionStrategy',
+  'questionSelectionCommonSenseType',
+  'questionRandomMode',
+  'autoMasterTimeLeft',
+  'autoUnmasterOverSeconds',
+  'settingsVersion',
+  'hasSeenFeatureTip',
+])
+
+function isAppUserDataKey(key: string): boolean {
+  return ALLOWED_EXACT_KEYS.has(key) || ALLOWED_KEY_PREFIXES.some((prefix) => key.startsWith(prefix))
+}
+
 function isReservedKey(key: string): boolean {
-  void key
-  return false
+  return !isAppUserDataKey(key)
 }
 
 function listUserDataItems(): UserDataExportItem[] {
