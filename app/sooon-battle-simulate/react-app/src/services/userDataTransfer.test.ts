@@ -12,6 +12,10 @@ class FakeBlob {
   }
 }
 
+function isFakeBlob(value: unknown): value is FakeBlob {
+  return value instanceof FakeBlob
+}
+
 describe('userDataTransfer', () => {
   beforeEach(() => {
     localStorage.clear()
@@ -42,8 +46,11 @@ describe('userDataTransfer', () => {
     expect(result.ok).toBe(true)
 
     const [blob] = vi.mocked(URL.createObjectURL).mock.calls.at(-1) ?? []
-    expect(blob instanceof FakeBlob).toBe(true)
-    const text = (blob as FakeBlob).parts.join('')
+    expect(isFakeBlob(blob)).toBe(true)
+    if (!isFakeBlob(blob)) {
+      throw new Error('Expected export blob to use FakeBlob in test environment')
+    }
+    const text = blob.parts.join('')
     const payload = JSON.parse(text) as { items: Array<{ key: string; value: string }> }
     const keys = payload.items.map((item) => item.key).sort()
 
@@ -54,7 +61,7 @@ describe('userDataTransfer', () => {
     localStorage.setItem('sooon-question-stats', '{"old":1}')
     localStorage.setItem('lastLoadedData', 'stale')
 
-    const file = {
+    const file: Pick<File, 'text'> = {
       text: async () =>
         JSON.stringify({
           version: 1,
@@ -66,9 +73,9 @@ describe('userDataTransfer', () => {
             { key: 'questionSelectionStrategy', value: 'all_questions' },
           ],
         }),
-    } as File
+    }
 
-    const result = await importUserData(file)
+    const result = await importUserData(file as File)
     expect(result.ok).toBe(true)
     expect(localStorage.getItem('sooon-question-stats')).toBe('{"new":1}')
     expect(localStorage.getItem('questionSelectionStrategy')).toBe('all_questions')
