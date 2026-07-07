@@ -70,6 +70,12 @@ export interface QuestionBankCacheSyncState {
   reason: 'up_to_date' | 'cache_empty' | 'cache_incomplete' | 'manifest_changed' | 'manifest_unavailable'
 }
 
+export interface QuestionBankManifestInfo {
+  total: number
+  pageSize: number
+  pageCount: number
+}
+
 interface QuestionBankMetaEntry {
   key: string
   value: unknown
@@ -181,6 +187,46 @@ function parseQuestionPayload(payload: unknown): QuestionItem[] {
 
   if (payload && typeof payload === 'object') {
     return parseObjectPayload(payload as Record<string, RawQuestionPayload>)
+  }
+
+  return []
+}
+
+/**
+ * 解析题库数据，保留 deleted 标记的题目。
+ * 供同步/写入路径使用——确保 IndexedDB 中标记为 deleted 的旧记录能被覆盖更新，
+ * 避免残留旧版本（无 deleted 字段）在读取时绕过过滤。
+ */
+function parseObjectPayloadIncludeDeleted(payload: Record<string, RawQuestionPayload>): QuestionItem[] {
+  return Object.entries(payload).map(([question, raw]) =>
+    shuffleQuestionOptions(normalizeQuestion(question, raw)),
+  )
+}
+
+function parseArrayPayloadIncludeDeleted(payload: RawQuestionArrayPayload[]): QuestionItem[] {
+  return payload.map((raw) =>
+    shuffleQuestionOptions(
+      normalizeQuestion(typeof raw.question === 'string' ? raw.question : '', {
+        options: raw.options,
+        answer: raw.answer,
+        type: raw.type,
+        deleted: raw.deleted,
+        source_id: raw.source_id,
+        sourceId: raw.sourceId,
+        updated_at: raw.updated_at,
+        updatedAt: raw.updatedAt,
+      }),
+    ),
+  )
+}
+
+function parseQuestionPayloadIncludeDeleted(payload: unknown): QuestionItem[] {
+  if (Array.isArray(payload)) {
+    return parseArrayPayloadIncludeDeleted(payload as RawQuestionArrayPayload[])
+  }
+
+  if (payload && typeof payload === 'object') {
+    return parseObjectPayloadIncludeDeleted(payload as Record<string, RawQuestionPayload>)
   }
 
   return []
@@ -627,7 +673,8 @@ async function tryLoadCachedQuestions(): Promise<QuestionItem[]> {
 
 async function loadQuestionBankFromNetwork(signal?: AbortSignal): Promise<QuestionItem[]> {
   const payload = await fetchQuestionPayload(QUESTION_BANK_URL, signal)
-  return parseQuestionPayload(payload)
+  // 解析全部题目（含 deleted），由 loadQuestionBank 统一过滤
+  return parseQuestionPayloadIncludeDeleted(payload)
 }
 
 function pickBootstrapPage(manifest: ParsedManifest, syncedPageHashes: Record<string, string>): ParsedManifestPage | null {
@@ -656,8 +703,8 @@ async function bootstrapFromSinglePage(
 
   try {
     const payload = await fetchQuestionPayload(resolvePageUrl(page.file), signal)
-    const questions = parseQuestionPayload(payload)
-    if (questions.length === 0) {
+    const allQuestions = parseQuestionPayloadIncludeDeleted(payload)
+    if (allQuestions.length === 0) {
       return {
         questions: [],
         syncedPageHashes: { ...syncedPageHashes },
@@ -665,11 +712,12 @@ async function bootstrapFromSinglePage(
     }
 
     const nextSyncedPageHashes = { ...syncedPageHashes, [page.file]: typeof page.hash === 'string' ? page.hash : '' }
-    await upsertQuestionsInCache(questions)
+    // 存储全部题目（含 deleted），确保 IndexedDB 中旧记录被覆盖
+    await upsertQuestionsInCache(allQuestions)
     await writeCacheMeta(manifest.signature, nextSyncedPageHashes)
 
     return {
-      questions,
+      questions: allQuestions.filter(isValidQuestion),
       syncedPageHashes: nextSyncedPageHashes,
     }
   } catch {
@@ -697,7 +745,8 @@ async function syncManifestPagesToCache(manifest: ParsedManifest): Promise<void>
   for (const page of pending) {
     try {
       const payload = await fetchQuestionPayload(resolvePageUrl(page.file))
-      const rows = parseQuestionPayload(payload)
+      // 存储全部题目（含 deleted），确保 IndexedDB 中旧记录被覆盖
+      const rows = parseQuestionPayloadIncludeDeleted(payload)
       if (rows.length > 0) {
         await upsertQuestionsInCache(rows)
       }
@@ -751,7 +800,8 @@ async function loadPoolFromManifestPages(manifest: ParsedManifest, requiredCount
 
     try {
       const pagePayload = await fetchQuestionPayload(resolvePageUrl(page.file), signal)
-      const rows = parseQuestionPayload(pagePayload)
+      // 解析全部题目（含 deleted），由调用方统一过滤
+      const rows = parseQuestionPayloadIncludeDeleted(pagePayload)
       if (rows.length > 0) {
         pool.push(...rows)
       }
@@ -777,10 +827,11 @@ export async function loadQuestionBank(signal?: AbortSignal): Promise<QuestionIt
 
   const network = await loadQuestionBankFromNetwork(signal)
   if (network.length > 0 && isIndexedDbAvailable()) {
+    // 存储全部题目（含 deleted），确保 IndexedDB 中旧记录被覆盖
     void upsertQuestionsInCache(network).catch(() => undefined)
   }
 
-  return network
+  return network.filter(isValidQuestion)
 }
 
 export async function loadCachedQuestionBank(): Promise<QuestionItem[]> {
@@ -867,6 +918,26 @@ export async function inspectQuestionBankCacheSync(signal?: AbortSignal): Promis
   }
 }
 
+/**
+ * 获取线上题库清单信息（题目总数、分页大小、分页数）。
+ * 只请求轻量的 manifest 文件，不下载题目数据本身。
+ * 用于题库页面显示「线上题库 vs 本地缓存」的数据差异。
+ */
+export async function loadManifestInfo(signal?: AbortSignal): Promise<QuestionBankManifestInfo | null> {
+  try {
+    const payload = await fetchQuestionPayload(QUESTION_BANK_MANIFEST_URL, signal)
+    const manifest = parseManifest(payload)
+    if (!manifest) return null
+    return {
+      total: manifest.total,
+      pageSize: manifest.pageSize,
+      pageCount: manifest.pages.length,
+    }
+  } catch {
+    return null
+  }
+}
+
 export async function loadQuestionPool(requiredCount: number, signal?: AbortSignal): Promise<QuestionItem[]> {
   const safeRequiredCount = Math.max(1, Math.floor(requiredCount))
 
@@ -905,10 +976,11 @@ export async function loadQuestionPool(requiredCount: number, signal?: AbortSign
 
     const remotePool = await loadPoolFromManifestPages(manifest, safeRequiredCount, signal)
     if (remotePool.length > 0) {
+      // 存储全部题目（含 deleted），确保 IndexedDB 中旧记录被覆盖
       void upsertQuestionsInCache(remotePool).catch(() => undefined)
     }
 
-    return remotePool
+    return remotePool.filter(isValidQuestion)
   } catch {
     const cached = await tryLoadCachedQuestions()
     if (cached.length >= safeRequiredCount) {
