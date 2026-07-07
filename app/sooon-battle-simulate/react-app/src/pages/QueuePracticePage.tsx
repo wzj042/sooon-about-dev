@@ -17,21 +17,12 @@ import {
 } from '../domain/validation'
 import { loadPracticeQueueSettings, savePracticeQueueSettings } from '../services/practiceQueueSettings'
 import {
-  advanceLastPracticeQueueProgress,
   consumePracticeQueue,
   loadLastPracticeQueueSession,
-  saveLastPracticeQueueSession,
 } from '../services/practiceQueue'
 import { getQuestionStat, loadQuestionStatsMap, setQuestionMastered } from '../services/questionStats'
 import { detachDebugSettle, attachDebugSettle } from '../store/actions/debug'
 import { useGameStore } from '../store/gameStore'
-
-function rotateQueueByCursor<T>(list: T[], cursor: number): T[] {
-  if (list.length <= 1) return [...list]
-  const offset = ((Math.floor(cursor) % list.length) + list.length) % list.length
-  if (offset === 0) return [...list]
-  return [...list.slice(offset), ...list.slice(0, offset)]
-}
 
 function onlyNumericKeyboard(event: ReactKeyboardEvent<HTMLInputElement>) {
   const allowed = ['Backspace', 'Delete', 'Tab', 'Enter', 'Escape', 'ArrowLeft', 'ArrowRight', 'Home', 'End']
@@ -63,22 +54,23 @@ export function QueuePracticePage() {
       practiceQueueMode: state.practiceQueueMode,
       practiceQueueTotal: state.practiceQueueTotal,
       practiceQueuePracticed: state.practiceQueuePracticed,
+      practiceQueueCursor: state.practiceQueueCursor,
+      practiceQueueCurrentScored: state.practiceQueueCurrentScored,
       questionLoadError: state.questionLoadError,
     })),
   )
 
   const startNewGame = useGameStore((state) => state.startNewGame)
-  const currentRound = useGameStore((state) => state.currentRound)
-  const totalRounds = useGameStore((state) => state.totalRounds)
   const activateQuestion = useGameStore((state) => state.activateQuestion)
   const selectAnswer = useGameStore((state) => state.selectAnswer)
   const continuePracticeQueueAfterReview = useGameStore((state) => state.continuePracticeQueueAfterReview)
+  const previousPracticeQueueQuestion = useGameStore((state) => state.previousPracticeQueueQuestion)
+  const nextPracticeQueueQuestion = useGameStore((state) => state.nextPracticeQueueQuestion)
   const showRankText = useGameStore((state) => state.showRankText)
   const setPracticeQueue = useGameStore((state) => state.setPracticeQueue)
   const updatePracticeQueueFlowSettings = useGameStore((state) => state.updatePracticeQueueFlowSettings)
   const [bootError, setBootError] = useState<string | null>(null)
-  const committedResultRoundRef = useRef<number | null>(null)
-  const autoMasterRoundRef = useRef<number | null>(null)
+  const autoMasterQuestionRef = useRef<string | null>(null)
   const questionShownAtRef = useRef<number | null>(null)
   const answerElapsedMsRef = useRef<number | null>(null)
   const questionWasMasteredRef = useRef(false)
@@ -100,10 +92,11 @@ export function QueuePracticePage() {
   const queueTotal = Math.max(0, Math.floor(gameState.practiceQueueTotal))
   const queuePracticed = Math.min(queueTotal, Math.max(0, Math.floor(gameState.practiceQueuePracticed)))
   const queueRemaining = Math.max(0, queueTotal - queuePracticed)
-  const queueInFlight =
-    gameState.gamePhase === 'question' || gameState.gamePhase === 'waiting' || gameState.gamePhase === 'result' ? 1 : 0
-  const queueProgressCurrent = Math.min(queueTotal, queuePracticed + queueInFlight)
+  const queueCursor = Math.min(queueTotal - 1, Math.max(0, Math.floor(gameState.practiceQueueCursor)))
+  const queueProgressCurrent = queueTotal > 0 ? queueCursor + 1 : 0
   const queueProgressRatio = queueTotal > 0 ? Math.min(1, queueProgressCurrent / queueTotal) : 0
+  const canGoPrevious = queueTotal > 0 && queueCursor > 0
+  const canGoNext = queueTotal > 0 && queueCursor < queueTotal - 1 && queueCursor + 1 < queuePracticed
 
   useEffect(() => {
     if (!settingsOpen) return
@@ -174,18 +167,17 @@ export function QueuePracticePage() {
       let practiceQueue: Awaited<ReturnType<typeof consumePracticeQueue>> = []
       let initialPracticedCount = 0
 
+      let initialCursor = 0
       if (shouldResumeQueue && lastSession) {
-        practiceQueue = rotateQueueByCursor(lastSession.questions, lastSession.cursor)
+        practiceQueue = lastSession.questions
         initialPracticedCount = lastSession.practicedCount
-        saveLastPracticeQueueSession(practiceQueue, 0, initialPracticedCount)
+        initialCursor = lastSession.cursor
       } else {
         practiceQueue = await consumePracticeQueue()
-        if (practiceQueue.length > 0) {
-          saveLastPracticeQueueSession(practiceQueue, 0, 0)
-        } else if (lastSession) {
-          practiceQueue = rotateQueueByCursor(lastSession.questions, lastSession.cursor)
+        if (practiceQueue.length <= 0 && lastSession) {
+          practiceQueue = lastSession.questions
           initialPracticedCount = lastSession.practicedCount
-          saveLastPracticeQueueSession(practiceQueue, 0, initialPracticedCount)
+          initialCursor = lastSession.cursor
         }
       }
 
@@ -194,7 +186,7 @@ export function QueuePracticePage() {
         return
       }
 
-      setPracticeQueue(practiceQueue, initialPracticedCount)
+      setPracticeQueue(practiceQueue, initialPracticedCount, initialCursor)
       if (cancelled) return
       await startNewGame()
     }
@@ -211,20 +203,6 @@ export function QueuePracticePage() {
       useGameStore.getState().destroy()
     }
   }, [setPracticeQueue, startNewGame])
-
-  useEffect(() => {
-    if (!gameState.practiceQueueMode) return
-    if (gameState.gamePhase !== 'result') {
-      if (gameState.gamePhase === 'waiting' || gameState.gamePhase === 'question') {
-        committedResultRoundRef.current = null
-      }
-      return
-    }
-    if (committedResultRoundRef.current === currentRound) return
-
-    advanceLastPracticeQueueProgress(1)
-    committedResultRoundRef.current = currentRound
-  }, [currentRound, gameState.gamePhase, gameState.practiceQueueMode])
 
   useEffect(() => {
     questionShownAtRef.current = null
@@ -275,11 +253,11 @@ export function QueuePracticePage() {
 
     if (gameState.gamePhase !== 'result' && !waitingForManualReview) {
       if ((gameState.gamePhase === 'waiting' || gameState.gamePhase === 'question') && gameState.playerSelection === null) {
-        autoMasterRoundRef.current = null
+        autoMasterQuestionRef.current = null
       }
       return
     }
-    if (autoMasterRoundRef.current === currentRound) return
+    if (autoMasterQuestionRef.current === gameState.currentQuestion) return
     if (!gameState.currentQuestion) return
     if (answerElapsedMsRef.current === null) return
     if (questionWasMasteredRef.current) {
@@ -290,7 +268,7 @@ export function QueuePracticePage() {
         setQuestionMastered(gameState.currentQuestion, false)
         setCurrentQuestionMastered(false)
         showRankText('已取消掌握')
-        autoMasterRoundRef.current = currentRound
+        autoMasterQuestionRef.current = gameState.currentQuestion
         return
       }
     }
@@ -301,9 +279,8 @@ export function QueuePracticePage() {
     setQuestionMastered(gameState.currentQuestion, true)
     setCurrentQuestionMastered(true)
     showRankText('已标注掌握')
-    autoMasterRoundRef.current = currentRound
+    autoMasterQuestionRef.current = gameState.currentQuestion
   }, [
-    currentRound,
     gameState.currentQuestion,
     gameState.gamePhase,
     gameState.playerCorrect,
@@ -365,43 +342,94 @@ export function QueuePracticePage() {
 
   return (
     <AppLayout footer={footer}>
-      {bootError ? <div className="mb-3 rounded-md bg-amber-100 px-3 py-2 text-sm text-amber-800">{bootError}</div> : null}
-      {gameState.practiceQueueMode ? (
-        <div className="mb-3 rounded-md bg-sky-50 px-3 py-2 text-sm text-sky-900">
-          <div className="font-semibold">当前队列刷题进度 {queueProgressCurrent} / {queueTotal}</div>
-          <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-sky-100">
-            <div className="h-full bg-sky-500 transition-all" style={{ width: `${(queueProgressRatio * 100).toFixed(2)}%` }} />
-          </div>
-          <div className="mt-1">已练习 {queuePracticed} | 剩余 {queueRemaining}</div>
-        </div>
-      ) : null}
-      {gameState.currentQuestion ? (
-        <div className="queue-practice-status">
-          <div className="queue-practice-status-row">
-            <span className={`queue-practice-mastery-badge ${currentQuestionMastered ? 'is-mastered' : 'is-unmastered'}`}>
-              {currentQuestionMastered ? '已掌握' : '未掌握'}
-            </span>
-            <span className="queue-practice-timer">{elapsedSeconds}s</span>
-          </div>
-          {activeThresholdSeconds > 0 ? (
-            <>
-              <div className="queue-practice-threshold-label">
-                {activeThresholdLabel} {activeThresholdSeconds}s
+      <div className="queue-practice-page">
+        {bootError ? <div className="mb-3 rounded-md bg-amber-100 px-3 py-2 text-sm text-amber-800">{bootError}</div> : null}
+        {gameState.practiceQueueMode ? (
+          <div className="queue-practice-header">
+            <button
+              aria-label="上一题"
+              className="queue-practice-nav"
+              disabled={!canGoPrevious}
+              type="button"
+              onClick={previousPracticeQueueQuestion}
+            >
+              ←
+            </button>
+            <div className="queue-practice-header-body">
+              <div className="queue-practice-header-main">
+                <div className="queue-practice-header-meta">
+                  <div className="queue-practice-header-title">
+                    进度 {queueProgressCurrent} / {queueTotal}
+                  </div>
+                  <div className="queue-practice-header-counts">
+                    已练习 {queuePracticed} | 剩余 {queueRemaining}
+                  </div>
+                </div>
+                {gameState.currentQuestion ? (
+                  <div className="queue-practice-header-mastery">
+                    <span className={`queue-practice-mastery-badge ${currentQuestionMastered ? 'is-mastered' : 'is-unmastered'}`}>
+                      {currentQuestionMastered ? '已掌握' : '未掌握'}
+                    </span>
+                    <span className="queue-practice-timer">{elapsedSeconds}s</span>
+                  </div>
+                ) : null}
               </div>
-              <div className="queue-practice-threshold-track">
-                <div
-                  className={`queue-practice-threshold-fill ${currentQuestionMastered ? 'is-unmaster' : 'is-master'}`}
-                  style={{ width: `${(activeThresholdProgress * 100).toFixed(2)}%` }}
-                />
+              <div className="queue-practice-header-bars">
+                <div className="queue-practice-progress-track">
+                  <div
+                    className="queue-practice-progress-fill"
+                    style={{ width: `${(queueProgressRatio * 100).toFixed(2)}%` }}
+                  />
+                </div>
+                {gameState.currentQuestion ? (
+                  <div className="queue-practice-threshold-track">
+                    <div
+                      className={`queue-practice-threshold-fill ${currentQuestionMastered ? 'is-unmaster' : 'is-master'}`}
+                      style={{ width: `${(activeThresholdProgress * 100).toFixed(2)}%` }}
+                    />
+                  </div>
+                ) : null}
               </div>
-            </>
-          ) : (
-            <div className="queue-practice-threshold-label">当前掌握状态未设置对应秒数阈值</div>
-          )}
-        </div>
-      ) : null}
+              {gameState.currentQuestion && activeThresholdSeconds > 0 ? (
+                <div className="queue-practice-header-bar-labels">
+                  <span>队列进度</span>
+                  <span>
+                    {activeThresholdLabel} {activeThresholdSeconds}s
+                  </span>
+                </div>
+              ) : null}
+            </div>
+            <button
+              aria-label="下一题"
+              className="queue-practice-nav"
+              disabled={!canGoNext}
+              type="button"
+              onClick={nextPracticeQueueQuestion}
+            >
+              →
+            </button>
+          </div>
+        ) : null}
 
-      <GameBoard
+        {gameState.practiceQueueMode && gameState.currentQuestion ? (
+          <div
+            className={`queue-practice-scored-hint ${gameState.practiceQueueCurrentScored ? 'is-scored' : 'is-new'}`}
+          >
+            {gameState.practiceQueueCurrentScored ? (
+              <>
+                <span className="queue-practice-scored-dot" />
+                <span>本题已练习，本次会话不会重复记录更新数据</span>
+              </>
+            ) : (
+              <>
+                <span className="queue-practice-scored-dot" />
+                <span>新题，答题后将记录练习数据</span>
+              </>
+            )}
+          </div>
+        ) : null}
+
+        <GameBoard
         autoSkipEndScreen={false}
         opponentId="Practice"
         optionWrapChars={practiceSettings.optionWrapChars}
@@ -589,10 +617,11 @@ export function QueuePracticePage() {
       {shouldManualAdvanceOnWrong ? (
         <div className="queue-next-floating">
           <button className="cta-button primary" type="button" onClick={continuePracticeQueueAfterReview}>
-            {currentRound < totalRounds ? '下一题' : '结束本轮'}
+            继续
           </button>
         </div>
       ) : null}
+      </div>
     </AppLayout>
   )
 }
