@@ -55,7 +55,7 @@ interface ParsedManifest {
 
 interface QuestionBankCacheSnapshot {
   manifestSignature: string | null
-  syncedPages: string[]
+  syncedPageHashes: Record<string, string>
   questions: QuestionItem[]
 }
 
@@ -81,10 +81,13 @@ const QUESTION_BANK_PAGE_PREFIX = toPublicUrl('assets/qb-pages/')
 const MIN_QUESTION_POOL_SIZE = 80
 
 const QUESTION_BANK_DB_NAME = 'sooon-question-bank'
-const QUESTION_BANK_DB_VERSION = 2
+// v3：同步进度改为「按分页 hash 增量」，签名变化不再整库清空。
+// 题库整体重构时把此版本号 +1，即可强制一次干净的全量重建。
+const QUESTION_BANK_DB_VERSION = 3
 const QUESTION_STORE_NAME = 'questions'
 const META_STORE_NAME = 'meta'
 const META_KEY_MANIFEST_SIGNATURE = 'manifestSignature'
+// 值语义：Record<分页文件名, 分页 hash>，用于按 hash 做增量同步。
 const META_KEY_SYNCED_PAGES = 'syncedPages'
 const LOCAL_MANIFEST_SIGNATURE_KEY = 'sooon-question-bank-manifest-signature'
 
@@ -253,16 +256,44 @@ function isIndexedDbAvailable(): boolean {
   return typeof indexedDB !== 'undefined'
 }
 
-function uniqueStringArray(values: string[]): string[] {
-  return Array.from(new Set(values))
-}
-
 function createEmptySnapshot(): QuestionBankCacheSnapshot {
   return {
     manifestSignature: null,
-    syncedPages: [],
+    syncedPageHashes: {},
     questions: [],
   }
+}
+
+/**
+ * 计算需要重新下载的分页：缓存里记录的 hash 与 manifest 中该页 hash 不一致（或从未同步）才需要重下。
+ * 内容未变的分页（hash 相同）直接跳过，这是增量同步的核心。
+ */
+export function selectPagesToSync(
+  pages: ParsedManifestPage[],
+  syncedPageHashes: Record<string, string>,
+): ParsedManifestPage[] {
+  return pages.filter((page) => {
+    const cachedHash = syncedPageHashes[page.file]
+    // 无缓存记录 → 需同步；有 hash 但与缓存不同 → 需同步；页无 hash 信息则保守重下。
+    if (typeof cachedHash !== 'string' || cachedHash.length === 0) return true
+    if (typeof page.hash !== 'string' || page.hash.length === 0) return true
+    return cachedHash !== page.hash
+  })
+}
+
+/** manifest 中已不存在的分页文件（用于清理陈旧的同步记录）。 */
+function findStalePageFiles(pages: ParsedManifestPage[], syncedPageHashes: Record<string, string>): string[] {
+  const manifestFiles = new Set(pages.map((page) => page.file))
+  return Object.keys(syncedPageHashes).filter((file) => !manifestFiles.has(file))
+}
+
+/** 由 manifest 分页构造「文件名 → hash」映射，代表这些分页均已同步。 */
+function buildSyncedHashesFromPages(pages: ParsedManifestPage[]): Record<string, string> {
+  const result: Record<string, string> = {}
+  for (const page of pages) {
+    result[page.file] = typeof page.hash === 'string' ? page.hash : ''
+  }
+  return result
 }
 
 function requestToPromise<T>(request: IDBRequest<T>): Promise<T> {
@@ -305,7 +336,7 @@ function openQuestionBankDb(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains(META_STORE_NAME)) {
         db.createObjectStore(META_STORE_NAME, { keyPath: 'key' })
       }
-      if (event.oldVersion < 2 && transaction) {
+      if (event.oldVersion < 3 && transaction) {
         transaction.objectStore(QUESTION_STORE_NAME).clear()
         transaction.objectStore(META_STORE_NAME).clear()
       }
@@ -349,10 +380,17 @@ function getMetaString(map: Map<string, unknown>, key: string): string | null {
   return typeof value === 'string' && value.length > 0 ? value : null
 }
 
-function getMetaStringArray(map: Map<string, unknown>, key: string): string[] {
+function getMetaStringRecord(map: Map<string, unknown>, key: string): Record<string, string> {
   const value = map.get(key)
-  if (!Array.isArray(value)) return []
-  return uniqueStringArray(value.filter((item): item is string => typeof item === 'string' && item.length > 0))
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+
+  const result: Record<string, string> = {}
+  for (const [file, hash] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof file === 'string' && file.length > 0 && typeof hash === 'string') {
+      result[file] = hash
+    }
+  }
+  return result
 }
 
 async function readCacheSnapshotFromDb(): Promise<QuestionBankCacheSnapshot> {
@@ -366,10 +404,11 @@ async function readCacheSnapshotFromDb(): Promise<QuestionBankCacheSnapshot> {
   await transactionToPromise(transaction)
 
   const metaMap = metaEntriesToMap(Array.isArray(metaRows) ? metaRows : [])
+  const syncedPageHashes = getMetaStringRecord(metaMap, META_KEY_SYNCED_PAGES)
 
   return {
     manifestSignature: getMetaString(metaMap, META_KEY_MANIFEST_SIGNATURE),
-    syncedPages: getMetaStringArray(metaMap, META_KEY_SYNCED_PAGES),
+    syncedPageHashes,
     questions: parseArrayPayload(Array.isArray(questionRows) ? (questionRows as RawQuestionArrayPayload[]) : []),
   }
 }
@@ -396,11 +435,11 @@ async function readQuestionCacheStateFromDb(): Promise<QuestionBankCacheState> {
 
   const metaMap = metaEntriesToMap(Array.isArray(metaRows) ? metaRows : [])
   const manifestSignature = getMetaString(metaMap, META_KEY_MANIFEST_SIGNATURE)
-  const syncedPages = getMetaStringArray(metaMap, META_KEY_SYNCED_PAGES)
+  const syncedPageHashes = getMetaStringRecord(metaMap, META_KEY_SYNCED_PAGES)
 
   return {
     manifestSignature,
-    syncedPageCount: syncedPages.length,
+    syncedPageCount: Object.keys(syncedPageHashes).length,
     questionCount: typeof questionCount === 'number' ? questionCount : 0,
   }
 }
@@ -443,7 +482,7 @@ async function loadCachedQuestionsPreview(limit: number): Promise<QuestionItem[]
   }
 }
 
-async function writeCacheMeta(manifestSignature: string, syncedPages: string[]): Promise<void> {
+async function writeCacheMeta(manifestSignature: string, syncedPageHashes: Record<string, string>): Promise<void> {
   const db = await openQuestionBankDb()
   const transaction = db.transaction(META_STORE_NAME, 'readwrite')
   const store = transaction.objectStore(META_STORE_NAME)
@@ -454,7 +493,7 @@ async function writeCacheMeta(manifestSignature: string, syncedPages: string[]):
   })
   store.put({
     key: META_KEY_SYNCED_PAGES,
-    value: uniqueStringArray(syncedPages),
+    value: { ...syncedPageHashes },
   })
 
   await transactionToPromise(transaction)
@@ -481,10 +520,7 @@ async function hydrateCacheMetaFromManifest(
   }
 
   try {
-    await writeCacheMeta(
-      manifest.signature,
-      manifest.pages.map((page) => page.file),
-    )
+    await writeCacheMeta(manifest.signature, buildSyncedHashesFromPages(manifest.pages))
     setStoredManifestSignature(manifest.signature)
 
     return {
@@ -495,23 +531,6 @@ async function hydrateCacheMetaFromManifest(
   } catch {
     return cacheState
   }
-}
-
-async function resetCacheForManifest(manifestSignature: string): Promise<void> {
-  const db = await openQuestionBankDb()
-  const transaction = db.transaction([QUESTION_STORE_NAME, META_STORE_NAME], 'readwrite')
-  transaction.objectStore(QUESTION_STORE_NAME).clear()
-  transaction.objectStore(META_STORE_NAME).clear()
-  transaction.objectStore(META_STORE_NAME).put({
-    key: META_KEY_MANIFEST_SIGNATURE,
-    value: manifestSignature,
-  })
-  transaction.objectStore(META_STORE_NAME).put({
-    key: META_KEY_SYNCED_PAGES,
-    value: [],
-  })
-
-  await transactionToPromise(transaction)
 }
 
 async function upsertQuestionsInCache(questions: QuestionItem[]): Promise<void> {
@@ -610,12 +629,10 @@ async function loadQuestionBankFromNetwork(signal?: AbortSignal): Promise<Questi
   return parseQuestionPayload(payload)
 }
 
-function pickBootstrapPage(manifest: ParsedManifest, syncedPages: string[]): ParsedManifestPage | null {
+function pickBootstrapPage(manifest: ParsedManifest, syncedPageHashes: Record<string, string>): ParsedManifestPage | null {
   if (manifest.pages.length === 0) return null
 
-  const synced = new Set(syncedPages)
-  const pending = manifest.pages.filter((page) => !synced.has(page.file))
-
+  const pending = selectPagesToSync(manifest.pages, syncedPageHashes)
   if (pending.length > 0) {
     return shuffle(pending)[0]
   }
@@ -625,14 +642,14 @@ function pickBootstrapPage(manifest: ParsedManifest, syncedPages: string[]): Par
 
 async function bootstrapFromSinglePage(
   manifest: ParsedManifest,
-  syncedPages: string[],
+  syncedPageHashes: Record<string, string>,
   signal?: AbortSignal,
-): Promise<{ questions: QuestionItem[]; syncedPages: string[] }> {
-  const page = pickBootstrapPage(manifest, syncedPages)
+): Promise<{ questions: QuestionItem[]; syncedPageHashes: Record<string, string> }> {
+  const page = pickBootstrapPage(manifest, syncedPageHashes)
   if (!page) {
     return {
       questions: [],
-      syncedPages: uniqueStringArray(syncedPages),
+      syncedPageHashes: { ...syncedPageHashes },
     }
   }
 
@@ -642,54 +659,60 @@ async function bootstrapFromSinglePage(
     if (questions.length === 0) {
       return {
         questions: [],
-        syncedPages: uniqueStringArray(syncedPages),
+        syncedPageHashes: { ...syncedPageHashes },
       }
     }
 
-    const nextSyncedPages = uniqueStringArray([...syncedPages, page.file])
+    const nextSyncedPageHashes = { ...syncedPageHashes, [page.file]: typeof page.hash === 'string' ? page.hash : '' }
     await upsertQuestionsInCache(questions)
-    await writeCacheMeta(manifest.signature, nextSyncedPages)
+    await writeCacheMeta(manifest.signature, nextSyncedPageHashes)
 
     return {
       questions,
-      syncedPages: nextSyncedPages,
+      syncedPageHashes: nextSyncedPageHashes,
     }
   } catch {
     return {
       questions: [],
-      syncedPages: uniqueStringArray(syncedPages),
+      syncedPageHashes: { ...syncedPageHashes },
     }
   }
 }
 
+/**
+ * 增量同步分页到 IndexedDB：
+ * - 只重新下载 hash 与缓存记录不一致（或从未同步）的分页，命中缓存的分页直接跳过。
+ * - 签名变化不再整库清空——更新题目/末尾追加只会命中少数分页，其余原样保留。
+ * - 已下载的分页按题目文本为 key `upsert` 覆盖；manifest 中被移除的分页仅清理同步记录，
+ *   遗留题目条目留待题库整体重构时通过 DB 版本号 +1 一次性重建收敛。
+ */
 async function syncManifestPagesToCache(manifest: ParsedManifest): Promise<void> {
   if (!isIndexedDbAvailable()) return
 
-  let snapshot = await readCacheSnapshotSafe()
-  if (snapshot.manifestSignature !== manifest.signature) {
-    await resetCacheForManifest(manifest.signature)
-    snapshot = createEmptySnapshot()
-    snapshot.manifestSignature = manifest.signature
-  }
+  const snapshot = await readCacheSnapshotSafe()
+  const syncedPageHashes = { ...snapshot.syncedPageHashes }
+  const pending = selectPagesToSync(manifest.pages, syncedPageHashes)
 
-  const syncedPages = new Set(snapshot.syncedPages)
-
-  for (const page of manifest.pages) {
-    if (syncedPages.has(page.file)) continue
-
+  for (const page of pending) {
     try {
       const payload = await fetchQuestionPayload(resolvePageUrl(page.file))
       const rows = parseQuestionPayload(payload)
       if (rows.length > 0) {
         await upsertQuestionsInCache(rows)
       }
-      syncedPages.add(page.file)
-      await writeCacheMeta(manifest.signature, Array.from(syncedPages))
+      syncedPageHashes[page.file] = typeof page.hash === 'string' ? page.hash : ''
+      await writeCacheMeta(manifest.signature, syncedPageHashes)
     } catch {
       // Skip failed pages and keep existing cache.
     }
   }
 
+  for (const file of findStalePageFiles(manifest.pages, syncedPageHashes)) {
+    delete syncedPageHashes[file]
+  }
+
+  // 即便所有分页都命中缓存，也要把签名写回，避免反复判定为「manifest 已变化」。
+  await writeCacheMeta(manifest.signature, syncedPageHashes)
   setStoredManifestSignature(manifest.signature)
 }
 
@@ -859,33 +882,12 @@ export async function loadQuestionPool(requiredCount: number, signal?: AbortSign
       return loadPoolFromManifestPages(manifest, safeRequiredCount, signal)
     }
 
-    const localManifestSignature = getStoredManifestSignature()
-    let snapshot = await readCacheSnapshotSafe()
-    const localSignatureChanged = localManifestSignature !== null && localManifestSignature !== manifest.signature
-    const dbSignatureChanged = snapshot.manifestSignature !== manifest.signature
-    const manifestChanged = localSignatureChanged || dbSignatureChanged
-
-    if (manifestChanged) {
-      try {
-        await resetCacheForManifest(manifest.signature)
-        setStoredManifestSignature(manifest.signature)
-      } catch {
-        return loadPoolFromManifestPages(manifest, safeRequiredCount, signal)
-      }
-
-      snapshot = {
-        manifestSignature: manifest.signature,
-        syncedPages: [],
-        questions: [],
-      }
-    } else if (localManifestSignature === null) {
-      setStoredManifestSignature(manifest.signature)
-    }
-
+    // manifest 变化时不再整库清空：先复用已有缓存立即出题，变化的分页交给后台增量同步覆盖。
+    const snapshot = await readCacheSnapshotSafe()
     let questionSource = snapshot.questions
 
     if (questionSource.length === 0) {
-      const bootstrap = await bootstrapFromSinglePage(manifest, snapshot.syncedPages, signal)
+      const bootstrap = await bootstrapFromSinglePage(manifest, snapshot.syncedPageHashes, signal)
       if (bootstrap.questions.length > 0) {
         questionSource = bootstrap.questions
       }

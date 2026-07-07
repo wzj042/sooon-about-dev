@@ -1,6 +1,51 @@
 import { describe, expect, it } from 'vitest'
 
-import { buildRoundQuestion, shuffleQuestionOptions } from './questionBank'
+import { buildRoundQuestion, selectPagesToSync, shuffleQuestionOptions } from './questionBank'
+
+describe('selectPagesToSync', () => {
+  const pages = [
+    { file: 'qb.page.001.json', count: 240, hash: 'h1' },
+    { file: 'qb.page.002.json', count: 240, hash: 'h2' },
+    { file: 'qb.page.003.json', count: 120, hash: 'h3' },
+  ]
+
+  it('skips pages whose cached hash matches the manifest', () => {
+    const result = selectPagesToSync(pages, {
+      'qb.page.001.json': 'h1',
+      'qb.page.002.json': 'h2',
+      'qb.page.003.json': 'h3',
+    })
+
+    expect(result).toEqual([])
+  })
+
+  it('only re-downloads pages whose hash changed', () => {
+    const result = selectPagesToSync(pages, {
+      'qb.page.001.json': 'h1',
+      'qb.page.002.json': 'CHANGED',
+      'qb.page.003.json': 'h3',
+    })
+
+    expect(result.map((page) => page.file)).toEqual(['qb.page.002.json'])
+  })
+
+  it('treats never-synced pages (appended pages) as pending', () => {
+    const result = selectPagesToSync(pages, {
+      'qb.page.001.json': 'h1',
+      'qb.page.002.json': 'h2',
+    })
+
+    expect(result.map((page) => page.file)).toEqual(['qb.page.003.json'])
+  })
+
+  it('re-downloads conservatively when a page has no hash information', () => {
+    const result = selectPagesToSync([{ file: 'qb.page.001.json', count: 240 }], {
+      'qb.page.001.json': 'h1',
+    })
+
+    expect(result.map((page) => page.file)).toEqual(['qb.page.001.json'])
+  })
+})
 
 describe('questionBank option shuffling', () => {
   it('remaps the answer when preprocessing loaded questions', () => {
