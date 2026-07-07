@@ -8,8 +8,10 @@ import {
   loadCachedQuestionBankPreview,
   loadQuestionBankCacheState,
   inspectQuestionBankCacheSync,
+  loadManifestInfo,
   loadQuestionPool,
   type QuestionBankCacheState,
+  type QuestionBankManifestInfo,
 } from '../services/questionBank'
 import { savePracticeQueue } from '../services/practiceQueue'
 import {
@@ -667,6 +669,9 @@ export function QuestionBankPage() {
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [manifestInfo, setManifestInfo] = useState<QuestionBankManifestInfo | null>(null)
+  const [localCacheTotal, setLocalCacheTotal] = useState(0)
+  const [localSyncedPages, setLocalSyncedPages] = useState(0)
 
   const [keyword, setKeyword] = useState(initialFilterState.keyword ?? '')
   const [typeFilter, setTypeFilter] = useState<TypeFilter>(initialFilterState.typeFilter ?? 'all')
@@ -715,6 +720,8 @@ export function QuestionBankPage() {
         pollRounds += 1
         try {
           const latestState = await loadQuestionBankCacheState()
+          setLocalCacheTotal(latestState.questionCount)
+          setLocalSyncedPages(latestState.syncedPageCount)
           if (!areCacheStatesEqual(previousCacheState, latestState)) {
             previousCacheState = latestState
             stableRounds = 0
@@ -758,8 +765,18 @@ export function QuestionBankPage() {
       setSyncing(false)
 
       try {
-        const initialCacheState = await loadQuestionBankCacheState()
+        // 优先获取线上题库清单 + 本地缓存状态（都是轻量操作，无需下载题目数据）
+        const [fetchedManifestInfo, initialCacheState] = await Promise.all([
+          loadManifestInfo().catch(() => null),
+          loadQuestionBankCacheState(),
+        ])
         if (cancelled) return
+
+        if (fetchedManifestInfo) {
+          setManifestInfo(fetchedManifestInfo)
+        }
+        setLocalCacheTotal(initialCacheState.questionCount)
+        setLocalSyncedPages(initialCacheState.syncedPageCount)
 
         if (initialCacheState.questionCount > 0) {
           const initialRows = await readCachedQuestionRows(initialCacheState)
@@ -798,6 +815,9 @@ export function QuestionBankPage() {
 
         const nextCacheState = await loadQuestionBankCacheState()
         if (cancelled) return
+
+        setLocalCacheTotal(nextCacheState.questionCount)
+        setLocalSyncedPages(nextCacheState.syncedPageCount)
 
         if (nextCacheState.questionCount <= 0) {
           if (initialRows.length === 0) {
@@ -1455,6 +1475,50 @@ export function QuestionBankPage() {
             </div>
           </div>
 
+          {/* 题库数据概况 — 展示线上总量、本地缓存量、差异数、同步状态 */}
+          <div className={filtersCollapsed ? 'mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#5c756e]' : 'mt-4 flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-2xl bg-[#f0f7f4] px-4 py-2.5 text-sm'}>
+            <span className="font-semibold text-[#31574d]">
+              {filtersCollapsed ? '📊' : '📊 题库概况'}
+            </span>
+            {manifestInfo ? (
+              <span>
+                📡 线上 <span className="font-semibold text-[#183a31]">{manifestInfo.total.toLocaleString()}</span> 题
+                {!filtersCollapsed && (
+                  <span className="ml-1 text-[#7a958b]">({manifestInfo.pageCount} 分页)</span>
+                )}
+              </span>
+            ) : (
+              <span className="text-[#8aa098]">📡 获取线上信息…</span>
+            )}
+            <span>
+              💾 本地 <span className="font-semibold text-[#183a31]">{localCacheTotal.toLocaleString()}</span> 题
+              {!filtersCollapsed && manifestInfo && (
+                <span className="ml-1 text-[#7a958b]">({localSyncedPages}/{manifestInfo.pageCount} 分页)</span>
+              )}
+            </span>
+            {manifestInfo && localCacheTotal < manifestInfo.total ? (
+              <span className="font-semibold text-[#b4552d]">
+                📥 差异 {(manifestInfo.total - localCacheTotal).toLocaleString()} 题
+              </span>
+            ) : manifestInfo && localCacheTotal >= manifestInfo.total ? (
+              <span className="font-semibold text-[#0f7b66]">✅ 已是最新</span>
+            ) : null}
+            {syncing ? (
+              <span className="inline-flex items-center gap-1 rounded-full bg-[#e6f5ef] px-2.5 py-0.5 text-xs font-semibold text-[#0f7b66]">
+                <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-[#0f7b66]" />
+                {filtersCollapsed ? '同步中' : '后台增量同步中…'}
+              </span>
+            ) : null}
+            {!syncing && loading && (
+              <span className="text-[#8aa098]">⏳ 正在加载题目数据…</span>
+            )}
+            {!filtersCollapsed && rows.length > 0 && rows.length < localCacheTotal && !loading ? (
+              <span className="text-[#7a958b]">
+                📋 已展示 {rows.length.toLocaleString()}/{localCacheTotal.toLocaleString()} 题
+              </span>
+            ) : null}
+          </div>
+
           <div
             className={filterPanelClass}
             id="question-bank-filters"
@@ -1647,7 +1711,6 @@ export function QuestionBankPage() {
 
           <div className={summaryBarClass}>
             <span className="rounded-full bg-[#edf5f1] px-3 py-1.5 font-medium text-[#4e6c63]">当前筛选: {filteredRows.length}/{rows.length}</span>
-            {syncing ? <span className="rounded-full bg-[#e6f5ef] px-3 py-1.5 font-medium text-[#0f7b66]">本地缓存后台同步中...</span> : null}
             <button
               className="inline-flex items-center rounded-full border border-[#cfe0d9] bg-white px-3 py-1.5 text-[13px] font-semibold text-[#33584e] transition hover:border-[#aacdbf] hover:bg-[#f4faf7]"
               type="button"
