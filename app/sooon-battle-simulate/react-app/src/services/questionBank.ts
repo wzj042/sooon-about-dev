@@ -97,6 +97,7 @@ let pageSyncSignature: string | null = null
 
 function isValidQuestion(item: QuestionItem): boolean {
   return (
+    item.deleted !== true &&
     typeof item.question === 'string' &&
     item.question.length > 0 &&
     Array.isArray(item.options) &&

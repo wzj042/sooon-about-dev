@@ -193,6 +193,26 @@ async function writeFileIfChanged(filePath, content) {
 }
 
 /**
+ * 归一化 deleted 字段：布尔值直接返回，数字 1/0 和字符串 "true"/"false"/"1"/"0" 转换为布尔
+ * @param {unknown} value
+ * @returns {boolean | undefined}
+ */
+function normalizeDeletedFlag(value) {
+  if (typeof value === 'boolean') return value
+  if (typeof value === 'number') {
+    if (value === 1) return true
+    if (value === 0) return false
+    return undefined
+  }
+  if (typeof value !== 'string') return undefined
+
+  const normalized = value.trim().toLowerCase()
+  if (normalized === 'true' || normalized === '1') return true
+  if (normalized === 'false' || normalized === '0') return false
+  return undefined
+}
+
+/**
  * @param {string} question
  * @param {RawQuestion} raw
  * @returns {NormalizedQuestion | null}
@@ -219,8 +239,9 @@ function normalizeQuestion(question, raw) {
     normalized.type = raw.type
   }
 
-  if (typeof raw?.deleted === 'boolean') {
-    normalized.deleted = raw.deleted
+  const deleted = normalizeDeletedFlag(raw?.deleted)
+  if (typeof deleted === 'boolean') {
+    normalized.deleted = deleted
   }
 
   const sourceIdRaw = typeof raw?.sourceId === 'string' ? raw.sourceId : typeof raw?.source_id === 'string' ? raw.source_id : null
