@@ -155,12 +155,6 @@ function normalizeQuestion(question: string, raw: RawQuestionPayload): QuestionI
   }
 }
 
-function parseObjectPayload(payload: Record<string, RawQuestionPayload>): QuestionItem[] {
-  return Object.entries(payload)
-    .map(([question, raw]) => shuffleQuestionOptions(normalizeQuestion(question, raw)))
-    .filter(isValidQuestion)
-}
-
 function parseArrayPayload(payload: RawQuestionArrayPayload[]): QuestionItem[] {
   return payload
     .map((raw) =>
@@ -178,18 +172,6 @@ function parseArrayPayload(payload: RawQuestionArrayPayload[]): QuestionItem[] {
       ),
     )
     .filter(isValidQuestion)
-}
-
-function parseQuestionPayload(payload: unknown): QuestionItem[] {
-  if (Array.isArray(payload)) {
-    return parseArrayPayload(payload as RawQuestionArrayPayload[])
-  }
-
-  if (payload && typeof payload === 'object') {
-    return parseObjectPayload(payload as Record<string, RawQuestionPayload>)
-  }
-
-  return []
 }
 
 /**
