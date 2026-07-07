@@ -10,6 +10,7 @@ import {
   inspectQuestionBankCacheSync,
   loadManifestInfo,
   loadQuestionPool,
+  triggerBackgroundCacheSync,
   type QuestionBankCacheState,
   type QuestionBankManifestInfo,
 } from '../services/questionBank'
@@ -24,8 +25,8 @@ import {
   type QuestionStatsMap,
 } from '../services/questionStats'
 
-const CACHE_POLL_DELAY_MS = 1200
-const MAX_CACHE_POLL_ROUNDS = 16
+const CACHE_POLL_DELAY_MS = 500
+const MAX_CACHE_POLL_ROUNDS = 10
 const ANSWER_LABELS = ['A', 'B', 'C', 'D'] as const
 const BASE62_ALPHABET = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
 const BASE62 = 62n
@@ -672,6 +673,7 @@ export function QuestionBankPage() {
   const [manifestInfo, setManifestInfo] = useState<QuestionBankManifestInfo | null>(null)
   const [localCacheTotal, setLocalCacheTotal] = useState(0)
   const [localSyncedPages, setLocalSyncedPages] = useState(0)
+  const [dataStatusVisible, setDataStatusVisible] = useState(true)
 
   const [keyword, setKeyword] = useState(initialFilterState.keyword ?? '')
   const [typeFilter, setTypeFilter] = useState<TypeFilter>(initialFilterState.typeFilter ?? 'all')
@@ -736,7 +738,7 @@ export function QuestionBankPage() {
           stableRounds += 1
         }
 
-        if (stableRounds >= 3 || pollRounds >= MAX_CACHE_POLL_ROUNDS) {
+        if (stableRounds >= 2 || pollRounds >= MAX_CACHE_POLL_ROUNDS) {
           if (!cancelled) {
             const fullRows = await loadCachedQuestionBank().catch(() => [])
             if (!cancelled && fullRows.length > 0) {
@@ -802,7 +804,8 @@ export function QuestionBankPage() {
           }
 
           setSyncing(true)
-          void loadQuestionPool(1).catch(() => undefined)
+          // 用轻量触发替代 loadQuestionPool(1)，避免读取全部 IDB 记录
+          void triggerBackgroundCacheSync().catch(() => undefined)
           void pollCacheUntilStable(initialCacheState)
           return
         }
@@ -847,6 +850,21 @@ export function QuestionBankPage() {
       if (timeoutId !== null) window.clearTimeout(timeoutId)
     }
   }, [])
+
+  // 加载完成且已同步后 5 秒自动收起题库概况栏
+  useEffect(() => {
+    const synced = !loading && !syncing && manifestInfo && localCacheTotal >= manifestInfo.total
+    if (!synced) {
+      setDataStatusVisible(true)
+      return
+    }
+
+    const timer = window.setTimeout(() => {
+      setDataStatusVisible(false)
+    }, 5000)
+
+    return () => window.clearTimeout(timer)
+  }, [loading, syncing, localCacheTotal, manifestInfo])
 
   useEffect(() => {
     const refreshStats = () => {
@@ -1441,6 +1459,10 @@ export function QuestionBankPage() {
     : 'min-w-0 max-w-full rounded-[22px] border border-[#d8e5df] bg-[#f7fbf9] px-3 py-2'
   const tableSectionSpacingClass = filtersCollapsed ? 'mt-2.5 sm:mt-3' : 'mt-3 sm:mt-4'
 
+  const onlineValid = manifestInfo ? manifestInfo.total - manifestInfo.dropped : null
+  const needsStatusDetail = syncing || loading || (manifestInfo ? localCacheTotal < manifestInfo.total : false)
+  const statusSynced = !loading && !syncing && manifestInfo && localCacheTotal >= manifestInfo.total
+
   return (
     <main className={PAGE_SHELL_CLASS}>
       <div className="mx-auto flex h-full min-h-full w-full max-w-[1320px] flex-col">
@@ -1475,49 +1497,84 @@ export function QuestionBankPage() {
             </div>
           </div>
 
-          {/* 题库数据概况 — 展示线上总量、本地缓存量、差异数、同步状态 */}
-          <div className={filtersCollapsed ? 'mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#5c756e]' : 'mt-4 flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-2xl bg-[#f0f7f4] px-4 py-2.5 text-sm'}>
-            <span className="font-semibold text-[#31574d]">
-              {filtersCollapsed ? '📊' : '📊 题库概况'}
-            </span>
-            {manifestInfo ? (
-              <span>
-                📡 线上 <span className="font-semibold text-[#183a31]">{manifestInfo.total.toLocaleString()}</span> 题
-                {!filtersCollapsed && (
-                  <span className="ml-1 text-[#7a958b]">({manifestInfo.pageCount} 分页)</span>
-                )}
+          {/* 题库数据概况 — 同步完成后自动收起，有差异或同步中展开详情 */}
+          {dataStatusVisible ? (
+            <div className={filtersCollapsed ? 'mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#5c756e]' : 'mt-4 flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-2xl bg-[#f0f7f4] px-4 py-2.5 text-sm'}>
+              <span className="font-semibold text-[#31574d]">
+                {filtersCollapsed ? '📊' : '📊 题库概况'}
               </span>
-            ) : (
-              <span className="text-[#8aa098]">📡 获取线上信息…</span>
-            )}
-            <span>
-              💾 本地 <span className="font-semibold text-[#183a31]">{localCacheTotal.toLocaleString()}</span> 题
-              {!filtersCollapsed && manifestInfo && (
-                <span className="ml-1 text-[#7a958b]">({localSyncedPages}/{manifestInfo.pageCount} 分页)</span>
+              {manifestInfo ? (
+                <>
+                  <span>
+                    📡 线上{' '}
+                    <span className="font-semibold text-[#183a31]">{manifestInfo.total.toLocaleString()}</span> 题
+                    {!filtersCollapsed && manifestInfo.dropped > 0 && onlineValid ? (
+                      <span className="ml-1 text-[#7a958b]">
+                        (有效 {onlineValid.toLocaleString()} · 已删除 {manifestInfo.dropped.toLocaleString()})
+                      </span>
+                    ) : null}
+                  </span>
+                  {needsStatusDetail ? (
+                    <>
+                      <span>
+                        💾 本地{' '}
+                        <span className="font-semibold text-[#183a31]">{localCacheTotal.toLocaleString()}</span> 题
+                        {!filtersCollapsed && (
+                          <span className="ml-1 text-[#7a958b]">({localSyncedPages}/{manifestInfo.pageCount} 分页)</span>
+                        )}
+                      </span>
+                      {localCacheTotal < manifestInfo.total ? (
+                        <span className="font-semibold text-[#b4552d]">
+                          📥 差异 {(manifestInfo.total - localCacheTotal).toLocaleString()} 题
+                        </span>
+                      ) : null}
+                    </>
+                  ) : (
+                    <span className="font-semibold text-[#0f7b66]">✅ 已是最新</span>
+                  )}
+                  {syncing ? (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-[#e6f5ef] px-2.5 py-0.5 text-xs font-semibold text-[#0f7b66]">
+                      <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-[#0f7b66]" />
+                      {filtersCollapsed ? '同步中' : '后台增量同步中…'}
+                    </span>
+                  ) : null}
+                  {!syncing && loading && !filtersCollapsed ? (
+                    <span className="text-[#8aa098]">⏳ 正在加载题目数据…</span>
+                  ) : null}
+                </>
+              ) : (
+                <span className="text-[#8aa098]">
+                  {syncing || loading ? '⏳ 正在获取题库信息…' : '📡 获取线上信息…'}
+                </span>
               )}
-            </span>
-            {manifestInfo && localCacheTotal < manifestInfo.total ? (
-              <span className="font-semibold text-[#b4552d]">
-                📥 差异 {(manifestInfo.total - localCacheTotal).toLocaleString()} 题
-              </span>
-            ) : manifestInfo && localCacheTotal >= manifestInfo.total ? (
-              <span className="font-semibold text-[#0f7b66]">✅ 已是最新</span>
-            ) : null}
-            {syncing ? (
-              <span className="inline-flex items-center gap-1 rounded-full bg-[#e6f5ef] px-2.5 py-0.5 text-xs font-semibold text-[#0f7b66]">
-                <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-[#0f7b66]" />
-                {filtersCollapsed ? '同步中' : '后台增量同步中…'}
-              </span>
-            ) : null}
-            {!syncing && loading && (
-              <span className="text-[#8aa098]">⏳ 正在加载题目数据…</span>
-            )}
-            {!filtersCollapsed && rows.length > 0 && rows.length < localCacheTotal && !loading ? (
-              <span className="text-[#7a958b]">
-                📋 已展示 {rows.length.toLocaleString()}/{localCacheTotal.toLocaleString()} 题
-              </span>
-            ) : null}
-          </div>
+              {!filtersCollapsed && !statusSynced ? (
+                <button
+                  className="ml-auto rounded-full border border-[#cfe0d9] bg-white px-2.5 py-1 text-xs font-semibold text-[#45645b] transition hover:border-[#aacdbf] hover:bg-[#f4faf7]"
+                  type="button"
+                  onClick={() => setDataStatusVisible(false)}
+                >
+                  收起
+                </button>
+              ) : null}
+            </div>
+          ) : manifestInfo ? (
+            /* 已收起：仅显示一行极简状态，点击可展开 */
+            <div className="mt-3 flex items-center gap-2 text-xs text-[#7a958b]">
+              <button
+                className="inline-flex items-center gap-1 rounded-full border border-transparent px-2 py-0.5 transition hover:border-[#d3e2db] hover:bg-[#f4faf7] hover:text-[#45645b]"
+                type="button"
+                title="展开题库概况"
+                onClick={() => setDataStatusVisible(true)}
+              >
+                <span className="text-[#0f7b66]">📊</span>
+                <span>{manifestInfo.total.toLocaleString()} 题</span>
+                {onlineValid ? (
+                  <span className="text-[#8aa098]">有效 {onlineValid.toLocaleString()}</span>
+                ) : null}
+                <span className="text-[#0f7b66]">✅</span>
+              </button>
+            </div>
+          ) : null}
 
           <div
             className={filterPanelClass}

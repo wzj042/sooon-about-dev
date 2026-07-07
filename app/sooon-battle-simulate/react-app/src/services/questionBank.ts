@@ -37,6 +37,7 @@ interface QuestionBankManifest {
   total?: unknown
   pageSize?: unknown
   contentHash?: unknown
+  dropped?: unknown
   pages?: unknown
 }
 
@@ -49,6 +50,7 @@ interface ParsedManifestPage {
 interface ParsedManifest {
   total: number
   pageSize: number
+  dropped: number
   pages: ParsedManifestPage[]
   signature: string
 }
@@ -74,6 +76,8 @@ export interface QuestionBankManifestInfo {
   total: number
   pageSize: number
   pageCount: number
+  /** manifest 中标记为已删除（软删除）的题目数 */
+  dropped: number
 }
 
 interface QuestionBankMetaEntry {
@@ -263,6 +267,7 @@ function parseManifest(payload: unknown): ParsedManifest | null {
   return {
     total: typeof manifest.total === 'number' ? manifest.total : 0,
     pageSize: typeof manifest.pageSize === 'number' ? manifest.pageSize : 0,
+    dropped: typeof manifest.dropped === 'number' ? manifest.dropped : 0,
     pages,
     signature: buildManifestSignature(manifest, pages),
   }
@@ -914,9 +919,30 @@ export async function loadManifestInfo(signal?: AbortSignal): Promise<QuestionBa
       total: manifest.total,
       pageSize: manifest.pageSize,
       pageCount: manifest.pages.length,
+      dropped: manifest.dropped,
     }
   } catch {
     return null
+  }
+}
+
+/**
+ * 触发后台增量同步（不清空缓存，不读取全部题目）。
+ * 仅 fetch manifest 然后启动分页对账——比 loadQuestionPool(1) 快得多，
+ * 因为后者会先做一次 IDB getAll() 读取全部记录。
+ * 用于题库页面「缓存已有数据，只需触发差量下载」的场景。
+ */
+export async function triggerBackgroundCacheSync(signal?: AbortSignal): Promise<void> {
+  if (!isIndexedDbAvailable()) return
+
+  try {
+    const manifestPayload = await fetchQuestionPayload(QUESTION_BANK_MANIFEST_URL, signal)
+    const manifest = parseManifest(manifestPayload)
+    if (!manifest) return
+
+    ensureBackgroundManifestSync(manifest)
+  } catch {
+    // 网络或解析失败时静默退出，缓存数据仍可使用
   }
 }
 
