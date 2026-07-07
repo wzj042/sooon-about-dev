@@ -22,6 +22,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | `assets/qb.json` | 遗留版题库源文件 |
 | `script/` | 题库处理 Python 脚本 + 油猴抓取脚本 |
 
+> **本目录嵌套在更大的 monorepo 中**：git 仓库根在上层的 `sooon-about-dev/`，`git status` 会带出本项目之外的文件；husky `pre-commit` 钩子位于该仓库根，只负责 `script/` 变更时重新生成脚本列表，与 react-app 的构建/`qb:split` 无关。
+
 ## 开发命令
 
 > 包管理器统一用 **pnpm**。所有 React 命令在 `react-app/` 目录下执行。
