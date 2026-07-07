@@ -4,9 +4,11 @@ import { DEFAULT_AVATAR_SRC } from '../domain/avatar'
 import { calculateScore } from '../domain/scoring'
 import type { AnimationState, GameStore, OpponentState, QuestionItem, QuestionRandomMode, QuestionSelectionStrategy, RoundHistory } from '../domain/types'
 import { generateRandomAvatar } from '../services/avatarService'
+import { buildQuestionHash } from '../services/questionIdentity'
 import { buildRoundQuestion, loadQuestionBank, shuffle } from '../services/questionBank'
 import { buildQuestionSelectionPool } from '../services/questionSelection'
 import { loadQuestionStatsMap, recordQuestionAttempt } from '../services/questionStats'
+import { updateLastPracticeQueueSessionCounts } from '../services/practiceQueue'
 import { TimerRegistry } from './timers'
 
 const DEFAULT_TOTAL_ROUNDS = 5
@@ -77,6 +79,8 @@ const DEFAULT_STATE = {
   practiceQueueMode: false,
   practiceQueueTotal: 0,
   practiceQueuePracticed: 0,
+  practiceQueueCursor: 0,
+  practiceQueueCurrentScored: false,
 
   questionLoadError: null as string | null,
 }
@@ -85,13 +89,6 @@ function normalizeQueueCursor(cursor: number, length: number): number {
   if (!Number.isFinite(cursor) || length <= 0) return 0
   const normalized = Math.floor(cursor) % length
   return normalized >= 0 ? normalized : normalized + length
-}
-
-function rotateByCursor<T>(items: T[], cursor: number): T[] {
-  if (items.length <= 1) return [...items]
-  const offset = normalizeQueueCursor(cursor, items.length)
-  if (offset === 0) return [...items]
-  return [...items.slice(offset), ...items.slice(0, offset)]
 }
 
 export const useGameStore = create<GameStore>((set, get) => {
@@ -103,6 +100,8 @@ export const useGameStore = create<GameStore>((set, get) => {
   let practiceQueueQuestions: QuestionItem[] = []
   let practiceQueueCursor = 0
   let practiceQueueProgress = 0
+  let practiceQueuePracticedCount = 0
+  let practiceQueueScoredHashes = new Set<string>()
   let practiceQueueAutoNextDelayMs = DEFAULT_PRACTICE_QUEUE_AUTO_NEXT_DELAY_MS
   let practiceQueueManualNextOnWrong = DEFAULT_PRACTICE_QUEUE_MANUAL_NEXT_ON_WRONG
 
@@ -113,6 +112,21 @@ export const useGameStore = create<GameStore>((set, get) => {
   const clearOpponentTimeout = () => {
     timers.clearTrackedTimeout(opponentTimeoutId)
     opponentTimeoutId = null
+  }
+
+  const persistPracticeQueueSession = () => {
+    if (practiceQueueQuestions.length === 0) return
+    updateLastPracticeQueueSessionCounts(
+      practiceQueueQuestions.length,
+      normalizeQueueCursor(practiceQueueCursor, practiceQueueQuestions.length),
+      Math.max(practiceQueueProgress, practiceQueuePracticedCount),
+    )
+  }
+
+  const getQuestionScored = (question: string | null): boolean => {
+    if (!question) return false
+    const hash = buildQuestionHash(question)
+    return hash ? practiceQueueScoredHashes.has(hash) : false
   }
 
   const stopTimer = () => {
@@ -148,22 +162,15 @@ export const useGameStore = create<GameStore>((set, get) => {
     const requiredCount = Math.max(1, Math.floor(count))
 
     if (practiceQueueQuestions.length > 0) {
-      const used = new Set<string>()
-      const queueWindow = rotateByCursor(practiceQueueQuestions, practiceQueueCursor)
-      const preferred = queueWindow.filter((item) => {
-        if (used.has(item.question)) return false
-        used.add(item.question)
-        return true
-      })
-
-      selectedQuestions = preferred.slice(0, requiredCount)
+      const currentQuestion = practiceQueueQuestions[normalizeQueueCursor(practiceQueueCursor, practiceQueueQuestions.length)]
+      selectedQuestions = currentQuestion ? [currentQuestion] : []
       questionSelectionPool = selectedQuestions
       set({
         questionLoadError: selectedQuestions.length === 0 ? 'No practiceable items in queue. Please re-filter in Question Bank.' : null,
       })
 
-      if (selectedQuestions.length > 0 && selectedQuestions.length !== get().totalRounds) {
-        set({ totalRounds: selectedQuestions.length })
+      if (selectedQuestions.length > 0 && get().totalRounds !== 1) {
+        set({ totalRounds: 1 })
       }
 
       return
@@ -225,8 +232,43 @@ export const useGameStore = create<GameStore>((set, get) => {
     return buildRoundQuestion(selectedQuestions[index])
   }
 
+  const advancePracticeQueueQuestion = () => {
+    if (practiceQueueQuestions.length === 0) return
+    if (practiceQueueCursor >= practiceQueueQuestions.length - 1) {
+      get().endGame()
+      return
+    }
+
+    stopTimer()
+    clearOpponentTimeout()
+    timers.clearTrackedTimeout(resultTimeoutId)
+    resultTimeoutId = null
+
+    practiceQueueCursor = normalizeQueueCursor(practiceQueueCursor + 1, practiceQueueQuestions.length)
+    persistPracticeQueueSession()
+
+    set((current) => ({
+      ...current,
+      practiceQueuePracticed: Math.max(practiceQueueProgress, practiceQueuePracticedCount),
+      practiceQueueCursor: practiceQueueCursor,
+    }))
+
+    startRoundInternal(1).catch(() => {
+      set({ questionLoadError: 'Failed to load next question' })
+    })
+  }
+
   const maybeGoNext = () => {
     const state = get()
+    if (state.practiceQueueMode && practiceQueueQuestions.length > 0) {
+      if (practiceQueueCursor < practiceQueueQuestions.length - 1) {
+        advancePracticeQueueQuestion()
+        return
+      }
+      get().endGame()
+      return
+    }
+
     if (state.currentRound < state.totalRounds) {
       get().nextRound()
       return
@@ -265,12 +307,23 @@ export const useGameStore = create<GameStore>((set, get) => {
       })
     }
 
-    const queuePracticedInSession = state.practiceQueueMode ? practiceQueueProgress + state.currentRound : 0
+    if (state.practiceQueueMode && state.currentQuestion) {
+      const hash = buildQuestionHash(state.currentQuestion)
+      if (hash && !practiceQueueScoredHashes.has(hash)) {
+        practiceQueueScoredHashes.add(hash)
+        practiceQueuePracticedCount = Math.max(practiceQueuePracticedCount, practiceQueueCursor + 1)
+        persistPracticeQueueSession()
+      }
+    }
+
+    const queuePracticedInSession = state.practiceQueueMode ? Math.max(practiceQueuePracticedCount, practiceQueueProgress) : 0
 
     set((current) => ({
       gamePhase: 'result',
       history: [...current.history, roundResult],
       practiceQueuePracticed: queuePracticedInSession,
+      practiceQueueCursor: state.practiceQueueMode ? practiceQueueCursor : current.practiceQueueCursor,
+      practiceQueueCurrentScored: state.practiceQueueMode ? getQuestionScored(state.currentQuestion) : current.practiceQueueCurrentScored,
       animations: {
         ...current.animations,
         optionsExitAnimation: { timestamp: Date.now() },
@@ -455,6 +508,7 @@ export const useGameStore = create<GameStore>((set, get) => {
     const isFinalRound = round === current.totalRounds
     const timeForRound = isFinalRound ? current.maxTime * 2 : current.maxTime
     const timeDecrement = isFinalRound ? 2 : 1
+    const isCurrentScored = getQuestionScored(questionData.question)
 
     set((state) => ({
       currentRound: round,
@@ -480,6 +534,7 @@ export const useGameStore = create<GameStore>((set, get) => {
         optionAnimations: true,
         optionsExitAnimation: false,
       },
+      practiceQueueCurrentScored: current.practiceQueueMode ? isCurrentScored : state.practiceQueueCurrentScored,
     }))
 
     const roundText = isFinalRound ? '最后一题，双倍得分' : `第 ${round} 题`
@@ -494,16 +549,15 @@ export const useGameStore = create<GameStore>((set, get) => {
 
     const state = get()
 
+    // 队列练习结束后再挑战，从头开始并清空本会话计分
     if (state.practiceQueueMode && practiceQueueQuestions.length > 0 && state.gamePhase === 'ended') {
-      const advancedBy = Math.max(0, Math.floor(state.practiceQueuePracticed))
-      if (advancedBy > 0) {
-        const delta = Math.max(0, advancedBy - practiceQueueProgress)
-        practiceQueueCursor = normalizeQueueCursor(practiceQueueCursor + delta, practiceQueueQuestions.length)
-        practiceQueueProgress += delta
-      }
+      practiceQueueCursor = 0
+      practiceQueuePracticedCount = 0
+      practiceQueueScoredHashes.clear()
+      persistPracticeQueueSession()
     }
 
-    const resetTotalRounds = state.practiceQueueMode && practiceQueueQuestions.length > 0 ? Math.max(1, practiceQueueQuestions.length) : DEFAULT_TOTAL_ROUNDS
+    const resetTotalRounds = state.practiceQueueMode && practiceQueueQuestions.length > 0 ? 1 : DEFAULT_TOTAL_ROUNDS
 
     set({
       gamePhase: 'ready',
@@ -511,7 +565,9 @@ export const useGameStore = create<GameStore>((set, get) => {
       totalRounds: resetTotalRounds,
       playerScore: 0,
       opponentScore: 0,
-      practiceQueuePracticed: state.practiceQueueMode ? practiceQueueProgress : 0,
+      practiceQueuePracticed: state.practiceQueueMode ? Math.max(practiceQueueProgress, practiceQueuePracticedCount) : 0,
+      practiceQueueCursor: state.practiceQueueMode ? practiceQueueCursor : 0,
+      practiceQueueCurrentScored: false,
       timeLeft: state.maxTime,
       currentMaxTime: state.maxTime,
       timerRunning: false,
@@ -586,9 +642,13 @@ export const useGameStore = create<GameStore>((set, get) => {
 
     nextRound: () => {
       const state = get()
+      if (state.practiceQueueMode) {
+        advancePracticeQueueQuestion()
+        return
+      }
       stopTimer()
       startRoundInternal(state.currentRound + 1).catch(() => {
-        set({ questionLoadError: 'Failed to start next round' })
+        set({ questionLoadError: 'Failed to start round' })
       })
     },
 
@@ -678,23 +738,78 @@ export const useGameStore = create<GameStore>((set, get) => {
       showResultsInternal(true)
     },
 
+    previousPracticeQueueQuestion: () => {
+      const state = get()
+      if (!state.practiceQueueMode) return
+      if (practiceQueueQuestions.length === 0) return
+      if (practiceQueueCursor <= 0) return
+
+      stopTimer()
+      clearOpponentTimeout()
+      timers.clearTrackedTimeout(resultTimeoutId)
+      resultTimeoutId = null
+
+      practiceQueueCursor = normalizeQueueCursor(practiceQueueCursor - 1, practiceQueueQuestions.length)
+      persistPracticeQueueSession()
+
+      set((current) => ({
+        ...current,
+        practiceQueuePracticed: Math.max(practiceQueueProgress, practiceQueuePracticedCount),
+        practiceQueueCursor: practiceQueueCursor,
+      }))
+
+      startRoundInternal(1).catch(() => {
+        set({ questionLoadError: 'Failed to load previous question' })
+      })
+    },
+
+    nextPracticeQueueQuestion: () => {
+      const state = get()
+      if (!state.practiceQueueMode) return
+      if (practiceQueueQuestions.length === 0) return
+      if (practiceQueueCursor >= practiceQueueQuestions.length - 1) return
+      // 未练习到的题不能通过手动导航切入
+      if (practiceQueueCursor + 1 >= practiceQueuePracticedCount) return
+
+      stopTimer()
+      clearOpponentTimeout()
+      timers.clearTrackedTimeout(resultTimeoutId)
+      resultTimeoutId = null
+
+      practiceQueueCursor = normalizeQueueCursor(practiceQueueCursor + 1, practiceQueueQuestions.length)
+      persistPracticeQueueSession()
+
+      set((current) => ({
+        ...current,
+        practiceQueuePracticed: Math.max(practiceQueueProgress, practiceQueuePracticedCount),
+        practiceQueueCursor: practiceQueueCursor,
+      }))
+
+      startRoundInternal(1).catch(() => {
+        set({ questionLoadError: 'Failed to load next question' })
+      })
+    },
+
     showRankText: (text) => {
       if (typeof text !== 'string' || text.trim().length === 0) return
       showRoundText(text.trim())
     },
 
-    setPracticeQueue: (questions, practicedCount = 0) => {
+    setPracticeQueue: (questions, practicedCount = 0, initialCursor = 0) => {
       practiceQueueQuestions = questions
-      practiceQueueCursor = 0
       practiceQueueProgress = Math.max(0, Math.floor(practicedCount))
+      practiceQueueCursor = normalizeQueueCursor(Math.floor(initialCursor), questions.length)
+      practiceQueuePracticedCount = practiceQueueProgress
+      practiceQueueScoredHashes.clear()
       selectedQuestions = []
       questionSelectionPool = []
-      const normalizedTotalRounds = Math.max(1, questions.length)
       set({
-        totalRounds: normalizedTotalRounds,
+        totalRounds: questions.length > 0 ? 1 : DEFAULT_TOTAL_ROUNDS,
         practiceQueueMode: questions.length > 0,
         practiceQueueTotal: questions.length > 0 ? questions.length : 0,
         practiceQueuePracticed: questions.length > 0 ? practiceQueueProgress : 0,
+        practiceQueueCursor: questions.length > 0 ? practiceQueueCursor : 0,
+        practiceQueueCurrentScored: false,
       })
     },
 
@@ -732,11 +847,15 @@ export const useGameStore = create<GameStore>((set, get) => {
         practiceQueueMode: false,
         practiceQueueTotal: 0,
         practiceQueuePracticed: 0,
+        practiceQueueCursor: 0,
+        practiceQueueCurrentScored: false,
         questionLoadError: null,
       })
       practiceQueueQuestions = []
       practiceQueueCursor = 0
       practiceQueueProgress = 0
+      practiceQueuePracticedCount = 0
+      practiceQueueScoredHashes.clear()
       practiceQueueAutoNextDelayMs = DEFAULT_PRACTICE_QUEUE_AUTO_NEXT_DELAY_MS
       practiceQueueManualNextOnWrong = DEFAULT_PRACTICE_QUEUE_MANUAL_NEXT_ON_WRONG
       selectedQuestions = []
@@ -744,6 +863,7 @@ export const useGameStore = create<GameStore>((set, get) => {
     },
 
     destroy: () => {
+      persistPracticeQueueSession()
       get().reset()
       timers.clearAll()
       timerIntervalId = null

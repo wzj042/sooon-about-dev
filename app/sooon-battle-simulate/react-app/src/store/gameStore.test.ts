@@ -70,23 +70,72 @@ describe('gameStore battle scenarios', () => {
     useGameStore.getState().reset()
   })
 
-  it('advances queue window after a finished queue game', async () => {
+  it('navigates queue questions with cursor and does not double count in session', async () => {
     const useGameStore = await loadStore()
     const queue = [createQuestion('1'), createQuestion('2'), createQuestion('3'), createQuestion('4'), createQuestion('5'), createQuestion('6')]
 
     useGameStore.getState().setPracticeQueue(queue)
     await useGameStore.getState().startNewGame()
     expect(useGameStore.getState().currentQuestion).toBe('q-1')
+    expect(useGameStore.getState().practiceQueueCursor).toBe(0)
+    expect(useGameStore.getState().totalRounds).toBe(1)
 
-    useGameStore.setState({
-      gamePhase: 'ended',
-      practiceQueuePracticed: 5,
-      currentRound: 5,
-    })
+    useGameStore.getState().activateQuestion()
+    useGameStore.getState().selectAnswer(0)
+    expect(useGameStore.getState().gamePhase).toBe('result')
+    expect(useGameStore.getState().practiceQueuePracticed).toBe(1)
 
+    // 答题后通过 nextRound 进入下一道新题
+    await useGameStore.getState().nextRound()
+    expect(useGameStore.getState().currentQuestion).toBe('q-2')
+    expect(useGameStore.getState().practiceQueueCursor).toBe(1)
+
+    await useGameStore.getState().previousPracticeQueueQuestion()
+    expect(useGameStore.getState().currentQuestion).toBe('q-1')
+    expect(useGameStore.getState().practiceQueueCursor).toBe(0)
+
+    // 手动"下一题"按钮不能切入未练习的新题
+    useGameStore.getState().nextPracticeQueueQuestion()
+    expect(useGameStore.getState().currentQuestion).toBe('q-1')
+
+    // 重做已练习的题不应重复计分
+    useGameStore.getState().activateQuestion()
+    useGameStore.getState().selectAnswer(0)
+    expect(useGameStore.getState().practiceQueuePracticed).toBe(1)
+  })
+
+  it('resets queue practice to the first question after ending and restarting', async () => {
+    const useGameStore = await loadStore()
+    const queue = [createQuestion('1'), createQuestion('2'), createQuestion('3')]
+
+    useGameStore.getState().setPracticeQueue(queue)
     await useGameStore.getState().startNewGame()
-    expect(useGameStore.getState().currentQuestion).toBe('q-6')
-    expect(useGameStore.getState().practiceQueuePracticed).toBe(5)
+
+    // 快速跳过到最后一题
+    useGameStore.getState().activateQuestion()
+    useGameStore.getState().selectAnswer(0)
+    await useGameStore.getState().nextRound()
+
+    useGameStore.getState().activateQuestion()
+    useGameStore.getState().selectAnswer(0)
+    await useGameStore.getState().nextRound()
+
+    expect(useGameStore.getState().currentQuestion).toBe('q-3')
+    expect(useGameStore.getState().practiceQueueCursor).toBe(2)
+    expect(useGameStore.getState().practiceQueuePracticed).toBe(2)
+
+    // 做完最后一题后进入下一题触发结束
+    useGameStore.getState().activateQuestion()
+    useGameStore.getState().selectAnswer(0)
+    expect(useGameStore.getState().practiceQueuePracticed).toBe(3)
+    await useGameStore.getState().nextRound()
+    expect(useGameStore.getState().gamePhase).toBe('ended')
+
+    // 再挑战应回到第一题并重置本会话进度
+    await useGameStore.getState().startNewGame()
+    expect(useGameStore.getState().currentQuestion).toBe('q-1')
+    expect(useGameStore.getState().practiceQueueCursor).toBe(0)
+    expect(useGameStore.getState().practiceQueuePracticed).toBe(0)
   })
 
   it('does not enter placeholder round when strict strategy has no matching questions', async () => {
@@ -116,7 +165,7 @@ describe('gameStore battle scenarios', () => {
     await useGameStore.getState().startNewGame()
 
     expect(useGameStore.getState().currentQuestion).toBe('q-qa')
-    expect(useGameStore.getState().totalRounds).toBe(5)
+    expect(useGameStore.getState().totalRounds).toBe(1)
     expect(useGameStore.getState().questionLoadError).toBeNull()
   })
 
@@ -197,7 +246,7 @@ describe('gameStore battle scenarios', () => {
 
       await vi.advanceTimersByTimeAsync(1)
       expect(useGameStore.getState().currentQuestion).toBe('q-qb')
-      expect(useGameStore.getState().currentRound).toBe(2)
+      expect(useGameStore.getState().currentRound).toBe(1)
     } finally {
       vi.useRealTimers()
     }
@@ -225,7 +274,7 @@ describe('gameStore battle scenarios', () => {
 
       await vi.advanceTimersByTimeAsync(1)
       expect(useGameStore.getState().currentQuestion).toBe('q-qb')
-      expect(useGameStore.getState().currentRound).toBe(2)
+      expect(useGameStore.getState().currentRound).toBe(1)
     } finally {
       vi.useRealTimers()
     }
