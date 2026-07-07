@@ -101,6 +101,8 @@ export interface GameState {
   practiceQueueMode: boolean
   practiceQueueTotal: number
   practiceQueuePracticed: number
+  practiceQueueCursor: number
+  practiceQueueCurrentScored: boolean
 
   questionLoadError: string | null
 }
@@ -122,8 +124,10 @@ export interface GameActions {
   updateQuestionRandomMode(mode: QuestionRandomMode): void
   updatePracticeQueueFlowSettings(params: { autoNextDelayMs?: number; manualNextOnWrong?: boolean }): void
   continuePracticeQueueAfterReview(): void
+  previousPracticeQueueQuestion(): void
+  nextPracticeQueueQuestion(): void
   showRankText(text: string): void
-  setPracticeQueue(questions: QuestionItem[], practicedCount?: number): void
+  setPracticeQueue(questions: QuestionItem[], practicedCount?: number, initialCursor?: number): void
   reset(): void
   destroy(): void
   debugSettle(mode?: number): void

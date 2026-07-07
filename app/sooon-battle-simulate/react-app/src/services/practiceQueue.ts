@@ -339,7 +339,7 @@ function loadFallbackPracticeQueuePayload(): Partial<PracticeQueuePayload> | nul
   }
 }
 
-function updateLastPracticeQueueSessionCounts(
+export function updateLastPracticeQueueSessionCounts(
   count: number,
   nextCursor: number,
   nextPracticedCount: number,
