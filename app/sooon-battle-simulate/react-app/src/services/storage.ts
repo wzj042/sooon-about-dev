@@ -39,6 +39,16 @@ export function getString(key: string, fallback: string): string {
   }
 }
 
+export function getSessionJson<T>(key: string, fallback: T): T {
+  try {
+    const raw = sessionStorage.getItem(key)
+    if (!raw) return fallback
+    return JSON.parse(raw) as T
+  } catch {
+    return fallback
+  }
+}
+
 export function setValue(key: string, value: string | number | boolean | object): void {
   try {
     if (typeof value === 'string') {

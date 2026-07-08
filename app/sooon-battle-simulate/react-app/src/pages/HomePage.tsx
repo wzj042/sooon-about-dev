@@ -173,7 +173,7 @@ export function HomePage() {
     if (!secondConfirmed) return
 
     clearQuestionHistory()
-    clearPracticeQueueSession()
+    void clearPracticeQueueSession()
     setUserDataTransferMessage('历史答题记录和队列练习记录已删除')
   }
 

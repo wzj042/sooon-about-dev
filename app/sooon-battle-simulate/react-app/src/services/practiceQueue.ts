@@ -1,7 +1,8 @@
 import type { QuestionItem } from '../domain/types'
 import { buildQuestionHash } from './questionIdentity'
 import { loadCachedQuestionBank, loadQuestionBank } from './questionBank'
-import { getJson, setValue } from './storage'
+import { getJson, getSessionJson, setValue } from './storage'
+import { clearPendingQueue, loadPendingQueue, savePendingQueue } from './practiceQueueStorage'
 
 interface PracticeQueueQuestionRef {
   questionHash?: string
@@ -10,14 +11,14 @@ interface PracticeQueueQuestionRef {
   updatedAt?: string
 }
 
-interface PracticeQueuePayload {
+export interface PracticeQueuePayload {
   version?: number
   refs?: PracticeQueueQuestionRef[]
   questions?: QuestionItem[]
   createdAt?: string
 }
 
-interface LastPracticeQueueSessionPayload {
+export interface LastPracticeQueueSessionPayload {
   version?: number
   refs?: PracticeQueueQuestionRef[]
   questions?: QuestionItem[]
@@ -125,10 +126,10 @@ function normalizePracticedCount(practicedCount: number): number {
 }
 
 function buildQuestionRef(question: QuestionItem): PracticeQueueQuestionRef {
+  // 只保存 questionHash，避免队列较大时 localStorage 配额不足。
+  // 队列创建和消耗都在同一批本地缓存题目上进行，hash 足以定位题目。
   return {
     questionHash: buildQuestionHash(question.question),
-    sourceId: normalizeOptionalString(question.sourceId),
-    updatedAt: normalizeOptionalString(question.updatedAt),
   }
 }
 
@@ -199,10 +200,6 @@ function hasLegacyQuestionRefFields(value: unknown): boolean {
       (typeof ref.questionHash !== 'string' || ref.questionHash.trim().length <= 0)
     )
   })
-}
-
-function shouldMigratePracticeQueuePayload(payload: Partial<PracticeQueuePayload>): boolean {
-  return payload.version !== PRACTICE_QUEUE_STORAGE_VERSION || hasLegacyQuestionRefFields(payload.refs) || normalizeLegacyQuestions(payload.questions).length > 0
 }
 
 function shouldMigrateLastPracticeQueueSessionPayload(payload: Partial<LastPracticeQueueSessionPayload>): boolean {
@@ -365,11 +362,22 @@ export function updateLastPracticeQueueSessionCounts(
   saveLastPracticeQueueSession(questions, nextCursor, nextPracticedCount)
 }
 
-export function savePracticeQueue(questions: QuestionItem[]): number {
+export async function savePracticeQueue(questions: QuestionItem[]): Promise<number> {
   const normalized = questions.filter(isPracticeableQuestionItem).slice(0, PRACTICE_QUEUE_MAX_ITEMS)
   const payload = buildPracticeQueuePayload(normalized)
 
-  // 先清理旧队列数据，避免 localStorage 配额不足或旧格式数据冲突导致无法覆盖
+  // 优先写入 IndexedDB，容量更大且持久化；失败时回退到 sessionStorage。
+  try {
+    await savePendingQueue(payload)
+  } catch {
+    try {
+      sessionStorage.setItem(PRACTICE_QUEUE_KEY, JSON.stringify(payload))
+    } catch {
+      // no-op
+    }
+  }
+
+  // 清理旧 localStorage / sessionStorage 中的遗留队列（兼容旧版本）
   try {
     localStorage.removeItem(PRACTICE_QUEUE_KEY)
     localStorage.removeItem(PRACTICE_QUEUE_FALLBACK_KEY)
@@ -377,12 +385,11 @@ export function savePracticeQueue(questions: QuestionItem[]): number {
     // no-op
   }
 
-  setValue(PRACTICE_QUEUE_KEY, payload)
   saveLastPracticeQueueSession(normalized, 0)
   return normalized.length
 }
 
-export function clearPracticeQueueSession(): void {
+export async function clearPracticeQueueSession(): Promise<void> {
   try {
     localStorage.removeItem(PRACTICE_QUEUE_KEY)
     localStorage.removeItem(LAST_PRACTICE_QUEUE_SESSION_KEY)
@@ -391,35 +398,63 @@ export function clearPracticeQueueSession(): void {
   }
 
   try {
+    sessionStorage.removeItem(PRACTICE_QUEUE_KEY)
     sessionStorage.removeItem(PRACTICE_QUEUE_FALLBACK_KEY)
   } catch {
     // no-op
   }
 
+  await clearPendingQueue()
+
   emitPracticeQueueSessionChanged()
 }
 
-export async function consumePracticeQueue(): Promise<QuestionItem[]> {
-  const payload = getJson<Partial<PracticeQueuePayload>>(PRACTICE_QUEUE_KEY, {})
+async function consumePracticeQueuePayload(payload: Partial<PracticeQueuePayload>): Promise<QuestionItem[] | null> {
   const refs = normalizeQuestionRefs(payload.refs)
   const legacyQuestions = normalizeLegacyQuestions(payload.questions)
+  if (refs.length <= 0 && legacyQuestions.length <= 0) return null
 
-  if (refs.length > 0 || legacyQuestions.length > 0) {
-    const migratedPayload = buildSerializableQueuePayload(payload)
-    if (migratedPayload && shouldMigratePracticeQueuePayload(payload)) {
-      setValue(PRACTICE_QUEUE_KEY, migratedPayload)
+  const migratedPayload = buildSerializableQueuePayload(payload)
+  persistPracticeQueueFallback(migratedPayload ?? payload)
+  return refs.length > 0 ? resolveQuestionRefs(refs) : legacyQuestions
+}
+
+export async function consumePracticeQueue(): Promise<QuestionItem[]> {
+  // 1. 优先读取 IndexedDB 中的待消费队列
+  const dbPayload = await loadPendingQueue()
+  if (dbPayload) {
+    const dbResult = await consumePracticeQueuePayload(dbPayload)
+    if (dbResult) {
+      await clearPendingQueue()
+      return dbResult
     }
+  }
 
+  // 2. IndexedDB 不可用时可能回退到了 sessionStorage
+  const sessionPayload = getSessionJson<Partial<PracticeQueuePayload>>(PRACTICE_QUEUE_KEY, {})
+  const sessionResult = await consumePracticeQueuePayload(sessionPayload)
+  if (sessionResult) {
+    try {
+      sessionStorage.removeItem(PRACTICE_QUEUE_KEY)
+    } catch {
+      // no-op
+    }
+    return sessionResult
+  }
+
+  // 3. 兼容旧版本：localStorage 中可能仍有遗留队列
+  const payload = getJson<Partial<PracticeQueuePayload>>(PRACTICE_QUEUE_KEY, {})
+  const result = await consumePracticeQueuePayload(payload)
+  if (result) {
     try {
       localStorage.removeItem(PRACTICE_QUEUE_KEY)
     } catch {
       // no-op
     }
-
-    persistPracticeQueueFallback(migratedPayload ?? payload)
-    return refs.length > 0 ? resolveQuestionRefs(refs) : legacyQuestions
+    return result
   }
 
+  // 4. fallback（例如 React StrictMode 二次挂载）
   const fallbackPayload = loadFallbackPracticeQueuePayload()
   if (!fallbackPayload) return []
 

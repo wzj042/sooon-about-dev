@@ -1151,7 +1151,7 @@ export function QuestionBankPage() {
         return
       }
 
-      const count = savePracticeQueue(queue)
+      const count = await savePracticeQueue(queue)
       if (count <= 0) {
         window.alert('当前筛选结果为空，无法开启队列练习')
         return

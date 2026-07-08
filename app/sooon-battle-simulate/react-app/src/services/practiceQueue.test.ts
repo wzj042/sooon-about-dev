@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 
+import 'fake-indexeddb/auto'
+
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('./questionBank', () => ({
@@ -16,6 +18,7 @@ import {
   loadLastPracticeQueueSessionSummary,
   savePracticeQueue,
 } from './practiceQueue'
+import { clearPendingQueue, loadPendingQueue } from './practiceQueueStorage'
 
 const PRACTICE_QUEUE_KEY = 'sooon-practice-queue'
 const PRACTICE_QUEUE_FALLBACK_KEY = 'sooon-practice-queue-fallback'
@@ -32,9 +35,10 @@ function buildQuestion(index: number) {
 }
 
 describe('practiceQueue storage', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     localStorage.clear()
     sessionStorage.clear()
+    await clearPendingQueue()
     vi.mocked(loadCachedQuestionBank).mockResolvedValue([])
     vi.mocked(loadQuestionBank).mockResolvedValue([])
   })
@@ -44,20 +48,17 @@ describe('practiceQueue storage', () => {
     const questions = Array.from({ length: total }, (_, index) => buildQuestion(index))
     vi.mocked(loadCachedQuestionBank).mockResolvedValue(questions)
 
-    const saved = savePracticeQueue(questions)
-    const savedPayload = JSON.parse(localStorage.getItem(PRACTICE_QUEUE_KEY) ?? '{}') as {
-      refs?: unknown[]
-      questions?: unknown[]
-    }
+    const saved = await savePracticeQueue(questions)
+    const savedPayload = await loadPendingQueue()
     const consumed = await consumePracticeQueue()
     const fallbackPayload = JSON.parse(sessionStorage.getItem(PRACTICE_QUEUE_FALLBACK_KEY) ?? '{}') as {
       payload?: { refs?: unknown[]; questions?: unknown[] }
     }
 
     expect(saved).toBe(total)
-    expect(savedPayload.refs).toHaveLength(total)
-    expect(savedPayload.questions).toBeUndefined()
-    expect((savedPayload.refs?.[0] as { question?: string } | undefined)?.question).toBeUndefined()
+    expect(savedPayload?.refs).toHaveLength(total)
+    expect(savedPayload?.questions).toBeUndefined()
+    expect((savedPayload?.refs?.[0] as { question?: string } | undefined)?.question).toBeUndefined()
     expect(consumed).toHaveLength(total)
     expect(fallbackPayload.payload?.refs).toHaveLength(total)
     expect(fallbackPayload.payload?.questions).toBeUndefined()
@@ -69,14 +70,12 @@ describe('practiceQueue storage', () => {
     const questions = [...activeQuestions, deletedQuestion]
     vi.mocked(loadCachedQuestionBank).mockResolvedValue(activeQuestions)
 
-    const saved = savePracticeQueue(questions)
-    const savedPayload = JSON.parse(localStorage.getItem(PRACTICE_QUEUE_KEY) ?? '{}') as {
-      refs?: unknown[]
-    }
+    const saved = await savePracticeQueue(questions)
+    const savedPayload = await loadPendingQueue()
     const consumed = await consumePracticeQueue()
 
     expect(saved).toBe(activeQuestions.length)
-    expect(savedPayload.refs).toHaveLength(activeQuestions.length)
+    expect(savedPayload?.refs).toHaveLength(activeQuestions.length)
     expect(consumed).toHaveLength(activeQuestions.length)
   })
 
@@ -85,7 +84,7 @@ describe('practiceQueue storage', () => {
     const newQueue = Array.from({ length: 4 }, (_, index) => buildQuestion(index + 10))
 
     vi.mocked(loadCachedQuestionBank).mockResolvedValue(oldQueue)
-    savePracticeQueue(oldQueue)
+    await savePracticeQueue(oldQueue)
     advanceLastPracticeQueueProgress(2)
 
     let session = await loadLastPracticeQueueSession()
@@ -93,7 +92,7 @@ describe('practiceQueue storage', () => {
     expect(session?.practicedCount).toBe(2)
 
     vi.mocked(loadCachedQuestionBank).mockResolvedValue(newQueue)
-    savePracticeQueue(newQueue)
+    await savePracticeQueue(newQueue)
     session = await loadLastPracticeQueueSession()
     expect(session?.cursor).toBe(0)
     expect(session?.practicedCount).toBe(0)
@@ -103,7 +102,7 @@ describe('practiceQueue storage', () => {
     const questions = Array.from({ length: 10 }, (_, index) => buildQuestion(index))
     vi.mocked(loadCachedQuestionBank).mockResolvedValue(questions)
 
-    savePracticeQueue(questions)
+    await savePracticeQueue(questions)
     await consumePracticeQueue()
 
     advanceLastPracticeQueueProgress(4)
@@ -123,15 +122,17 @@ describe('practiceQueue storage', () => {
     const questions = Array.from({ length: 3 }, (_, index) => buildQuestion(index))
     vi.mocked(loadCachedQuestionBank).mockResolvedValue(questions)
 
-    savePracticeQueue(questions)
+    await savePracticeQueue(questions)
     await consumePracticeQueue()
 
     expect(loadLastPracticeQueueSessionSummary()).not.toBeNull()
     expect(sessionStorage.getItem(PRACTICE_QUEUE_FALLBACK_KEY)).not.toBeNull()
 
-    clearPracticeQueueSession()
+    await clearPracticeQueueSession()
 
     expect(loadLastPracticeQueueSessionSummary()).toBeNull()
+    expect(await loadPendingQueue()).toBeNull()
+    expect(sessionStorage.getItem(PRACTICE_QUEUE_KEY)).toBeNull()
     expect(localStorage.getItem(PRACTICE_QUEUE_KEY)).toBeNull()
     expect(sessionStorage.getItem(PRACTICE_QUEUE_FALLBACK_KEY)).toBeNull()
   })

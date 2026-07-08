@@ -28,7 +28,11 @@
             window.localStorage.removeItem('sooon-practice-queue-fallback')
             window.localStorage.removeItem('sooon-last-practice-queue-session')
             try {
+              window.sessionStorage.removeItem('sooon-practice-queue')
               window.sessionStorage.removeItem('sooon-practice-queue-fallback')
+            } catch {}
+            try {
+              window.indexedDB.deleteDatabase('sooon-practice-queue')
             } catch {}
           }
           window.localStorage.setItem('sooon-app-version', APP_VERSION)
