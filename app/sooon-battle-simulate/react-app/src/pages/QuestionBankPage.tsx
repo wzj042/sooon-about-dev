@@ -640,10 +640,9 @@ async function readCurrentLocalQuestionRows(): Promise<QuestionItem[]> {
 
 async function readCachedQuestionRows(cacheState: QuestionBankCacheState): Promise<QuestionItem[]> {
   if (cacheState.questionCount <= 0) return []
-  if (cacheState.questionCount <= INITIAL_CACHE_PREVIEW_ROWS) {
-    return loadCachedQuestionBank()
-  }
-  return loadCachedQuestionBankPreview(INITIAL_CACHE_PREVIEW_ROWS)
+  // 题库表默认展示全部本地有效题目（不再只预览一个分片），
+  // 这样“全部题库”筛选后启动的队列练习才会包含全部题目。
+  return loadCachedQuestionBank()
 }
 
 const PAGE_SHELL_CLASS =
@@ -1526,6 +1525,11 @@ export function QuestionBankPage() {
                       {localCacheTotal < manifestInfo.total ? (
                         <span className="font-semibold text-[#b4552d]">
                           📥 差异 {(manifestInfo.total - localCacheTotal).toLocaleString()} 题
+                        </span>
+                      ) : null}
+                      {!filtersCollapsed && rows.length > 0 && rows.length < localCacheTotal ? (
+                        <span className="text-[#7a958b]">
+                          📋 已展示 {rows.length.toLocaleString()}/{localCacheTotal.toLocaleString()} 题
                         </span>
                       ) : null}
                     </>

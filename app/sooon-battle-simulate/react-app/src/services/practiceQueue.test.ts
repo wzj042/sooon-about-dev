@@ -63,6 +63,42 @@ describe('practiceQueue storage', () => {
     expect(fallbackPayload.payload?.questions).toBeUndefined()
   })
 
+  it('drops soft-deleted questions when saving and consuming the queue', async () => {
+    const activeQuestions = Array.from({ length: 5 }, (_, index) => buildQuestion(index))
+    const deletedQuestion = { ...buildQuestion(99), deleted: true as const }
+    const questions = [...activeQuestions, deletedQuestion]
+    vi.mocked(loadCachedQuestionBank).mockResolvedValue(activeQuestions)
+
+    const saved = savePracticeQueue(questions)
+    const savedPayload = JSON.parse(localStorage.getItem(PRACTICE_QUEUE_KEY) ?? '{}') as {
+      refs?: unknown[]
+    }
+    const consumed = await consumePracticeQueue()
+
+    expect(saved).toBe(activeQuestions.length)
+    expect(savedPayload.refs).toHaveLength(activeQuestions.length)
+    expect(consumed).toHaveLength(activeQuestions.length)
+  })
+
+  it('resets last session cursor and practiced count when saving a new queue', async () => {
+    const oldQueue = Array.from({ length: 3 }, (_, index) => buildQuestion(index))
+    const newQueue = Array.from({ length: 4 }, (_, index) => buildQuestion(index + 10))
+
+    vi.mocked(loadCachedQuestionBank).mockResolvedValue(oldQueue)
+    savePracticeQueue(oldQueue)
+    advanceLastPracticeQueueProgress(2)
+
+    let session = await loadLastPracticeQueueSession()
+    expect(session?.cursor).toBe(2)
+    expect(session?.practicedCount).toBe(2)
+
+    vi.mocked(loadCachedQuestionBank).mockResolvedValue(newQueue)
+    savePracticeQueue(newQueue)
+    session = await loadLastPracticeQueueSession()
+    expect(session?.cursor).toBe(0)
+    expect(session?.practicedCount).toBe(0)
+  })
+
   it('tracks practiced progress separately from cursor rotation', async () => {
     const questions = Array.from({ length: 10 }, (_, index) => buildQuestion(index))
     vi.mocked(loadCachedQuestionBank).mockResolvedValue(questions)

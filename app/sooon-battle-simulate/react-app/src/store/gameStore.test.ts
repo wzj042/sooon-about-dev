@@ -138,6 +138,19 @@ describe('gameStore battle scenarios', () => {
     expect(useGameStore.getState().practiceQueuePracticed).toBe(0)
   })
 
+  it('resets queue cursor and practiced count when setting a new queue', async () => {
+    const useGameStore = await loadStore()
+    const firstQueue = [createQuestion('1'), createQuestion('2')]
+    useGameStore.getState().setPracticeQueue(firstQueue, 2, 1)
+    expect(useGameStore.getState().practiceQueueCursor).toBe(1)
+    expect(useGameStore.getState().practiceQueuePracticed).toBe(2)
+
+    const secondQueue = [createQuestion('3'), createQuestion('4')]
+    useGameStore.getState().setPracticeQueue(secondQueue)
+    expect(useGameStore.getState().practiceQueueCursor).toBe(0)
+    expect(useGameStore.getState().practiceQueuePracticed).toBe(0)
+  })
+
   it('does not enter placeholder round when strict strategy has no matching questions', async () => {
     const useGameStore = await loadStore()
     mockPoolRef.current = [createQuestion('suwen-a', '素问'), createQuestion('suwen-b', '素问')]

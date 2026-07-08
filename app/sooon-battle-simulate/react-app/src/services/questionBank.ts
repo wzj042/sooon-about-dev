@@ -498,6 +498,29 @@ async function readQuestionCacheStateSafe(): Promise<QuestionBankCacheState> {
   }
 }
 
+function parseRawQuestionRow(raw: unknown): QuestionItem | null {
+  if (!raw || typeof raw !== 'object') return null
+
+  const payload = raw as RawQuestionArrayPayload
+  const questionText = typeof payload.question === 'string' ? payload.question : ''
+  if (questionText.length === 0) return null
+
+  const item = shuffleQuestionOptions(
+    normalizeQuestion(questionText, {
+      options: payload.options,
+      answer: payload.answer,
+      type: payload.type,
+      deleted: payload.deleted,
+      source_id: payload.source_id,
+      sourceId: payload.sourceId,
+      updated_at: payload.updated_at,
+      updatedAt: payload.updatedAt,
+    }),
+  )
+
+  return isValidQuestion(item) ? item : null
+}
+
 async function loadCachedQuestionsPreview(limit: number): Promise<QuestionItem[]> {
   if (!isIndexedDbAvailable()) return []
 
@@ -507,10 +530,37 @@ async function loadCachedQuestionsPreview(limit: number): Promise<QuestionItem[]
     const db = await openQuestionBankDb()
     const transaction = db.transaction(QUESTION_STORE_NAME, 'readonly')
     const store = transaction.objectStore(QUESTION_STORE_NAME)
-    const request = store.getAll(undefined, safeLimit) as IDBRequest<unknown[]>
-    const rows = await requestToPromise(request)
+    const result: QuestionItem[] = []
+
+    await new Promise<void>((resolve, reject) => {
+      const request = store.openCursor()
+
+      request.onsuccess = () => {
+        const cursor = request.result
+        if (!cursor) {
+          resolve()
+          return
+        }
+
+        const item = parseRawQuestionRow(cursor.value)
+        if (item) {
+          result.push(item)
+          if (result.length >= safeLimit) {
+            resolve()
+            return
+          }
+        }
+
+        cursor.continue()
+      }
+
+      request.onerror = () => {
+        reject(request.error ?? new Error('IndexedDB cursor failed'))
+      }
+    })
+
     await transactionToPromise(transaction)
-    return parseArrayPayload(Array.isArray(rows) ? (rows as RawQuestionArrayPayload[]) : [])
+    return result
   } catch {
     return []
   }
