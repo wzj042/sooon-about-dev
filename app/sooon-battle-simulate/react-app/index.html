@@ -1,9 +1,12 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="%BASE_URL%vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
     <title>素问模拟对战</title>
     <script>
       var _hmt = _hmt || [];
@@ -13,6 +16,26 @@
         var s = document.getElementsByTagName("script")[0];
         s.parentNode.insertBefore(hm, s);
       })();
+    </script>
+    <script>
+      // 版本清理：如果应用版本更新，清除可能与新代码冲突的队列相关本地缓存。
+      (function () {
+        var APP_VERSION = '2026.07.08-1'
+        try {
+          var stored = window.localStorage.getItem('sooon-app-version')
+          if (stored && stored !== APP_VERSION) {
+            window.localStorage.removeItem('sooon-practice-queue')
+            window.localStorage.removeItem('sooon-practice-queue-fallback')
+            window.localStorage.removeItem('sooon-last-practice-queue-session')
+            try {
+              window.sessionStorage.removeItem('sooon-practice-queue-fallback')
+            } catch {}
+          }
+          window.localStorage.setItem('sooon-app-version', APP_VERSION)
+        } catch {
+          // no-op
+        }
+      })()
     </script>
   </head>
   <body>

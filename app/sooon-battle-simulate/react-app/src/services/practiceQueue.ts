@@ -368,6 +368,15 @@ export function updateLastPracticeQueueSessionCounts(
 export function savePracticeQueue(questions: QuestionItem[]): number {
   const normalized = questions.filter(isPracticeableQuestionItem).slice(0, PRACTICE_QUEUE_MAX_ITEMS)
   const payload = buildPracticeQueuePayload(normalized)
+
+  // 先清理旧队列数据，避免 localStorage 配额不足或旧格式数据冲突导致无法覆盖
+  try {
+    localStorage.removeItem(PRACTICE_QUEUE_KEY)
+    localStorage.removeItem(PRACTICE_QUEUE_FALLBACK_KEY)
+  } catch {
+    // no-op
+  }
+
   setValue(PRACTICE_QUEUE_KEY, payload)
   saveLastPracticeQueueSession(normalized, 0)
   return normalized.length
@@ -424,12 +433,15 @@ export async function consumePracticeQueue(): Promise<QuestionItem[]> {
 
 export function saveLastPracticeQueueSession(questions: QuestionItem[], cursor = 0, practicedCount = 0): number {
   const normalized = questions.filter(isPracticeableQuestionItem).slice(0, PRACTICE_QUEUE_MAX_ITEMS)
+
+  // 先清理旧会话数据，避免 localStorage 配额不足或旧格式数据冲突导致无法覆盖
+  try {
+    localStorage.removeItem(LAST_PRACTICE_QUEUE_SESSION_KEY)
+  } catch {
+    // no-op
+  }
+
   if (normalized.length <= 0) {
-    try {
-      localStorage.removeItem(LAST_PRACTICE_QUEUE_SESSION_KEY)
-    } catch {
-      // no-op
-    }
     emitPracticeQueueSessionChanged()
     return 0
   }
