@@ -803,18 +803,15 @@ async function syncManifestPagesToCache(manifest: ParsedManifest): Promise<void>
   setStoredManifestSignature(manifest.signature)
 }
 
-function ensureBackgroundManifestSync(manifest: ParsedManifest): void {
-  if (!isIndexedDbAvailable()) return
+function ensureBackgroundManifestSync(manifest: ParsedManifest): Promise<void> {
+  if (!isIndexedDbAvailable()) return Promise.resolve()
 
   if (pageSyncPromise) {
     if (pageSyncSignature === manifest.signature) {
-      return
+      return pageSyncPromise
     }
 
-    void pageSyncPromise.finally(() => {
-      ensureBackgroundManifestSync(manifest)
-    })
-    return
+    return pageSyncPromise.then(() => ensureBackgroundManifestSync(manifest))
   }
 
   pageSyncSignature = manifest.signature
@@ -824,6 +821,7 @@ function ensureBackgroundManifestSync(manifest: ParsedManifest): void {
       pageSyncPromise = null
       pageSyncSignature = null
     })
+  return pageSyncPromise
 }
 
 async function loadPoolFromManifestPages(manifest: ParsedManifest, requiredCount: number, signal?: AbortSignal): Promise<QuestionItem[]> {
@@ -977,7 +975,7 @@ export async function loadManifestInfo(signal?: AbortSignal): Promise<QuestionBa
 }
 
 /**
- * 触发后台增量同步（不清空缓存，不读取全部题目）。
+ * 触发后台增量同步并等待结束（不清空缓存，不读取全部题目）。
  * 仅 fetch manifest 然后启动分页对账——比 loadQuestionPool(1) 快得多，
  * 因为后者会先做一次 IDB getAll() 读取全部记录。
  * 用于题库页面「缓存已有数据，只需触发差量下载」的场景。
@@ -990,7 +988,7 @@ export async function triggerBackgroundCacheSync(signal?: AbortSignal): Promise<
     const manifest = parseManifest(manifestPayload)
     if (!manifest) return
 
-    ensureBackgroundManifestSync(manifest)
+    await ensureBackgroundManifestSync(manifest)
   } catch {
     // 网络或解析失败时静默退出，缓存数据仍可使用
   }
@@ -1023,7 +1021,7 @@ export async function loadQuestionPool(requiredCount: number, signal?: AbortSign
       }
     }
 
-    ensureBackgroundManifestSync(manifest)
+    void ensureBackgroundManifestSync(manifest)
 
     if (questionSource.length > 0) {
       const localPool = buildPoolFromQuestions(questionSource, safeRequiredCount, maxPoolSize)

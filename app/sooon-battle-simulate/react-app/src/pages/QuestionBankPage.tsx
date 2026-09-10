@@ -26,7 +26,6 @@ import {
 } from '../services/questionStats'
 
 const CACHE_POLL_DELAY_MS = 500
-const MAX_CACHE_POLL_ROUNDS = 10
 const ANSWER_LABELS = ['A', 'B', 'C', 'D'] as const
 const BASE62_ALPHABET = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
 const BASE62 = 62n
@@ -710,54 +709,64 @@ export function QuestionBankPage() {
     let cancelled = false
     let timeoutId: number | null = null
 
-    const pollCacheUntilStable = async (initialCacheState: QuestionBankCacheState) => {
+    const syncCacheAndRefresh = async (initialCacheState: QuestionBankCacheState) => {
       let previousCacheState = initialCacheState
-      let stableRounds = 0
-      let pollRounds = 0
+      let finished = false
+      setSyncing(true)
 
       const pollCache = async () => {
-        if (cancelled) return
+        if (cancelled || finished) return
 
-        pollRounds += 1
         try {
           const latestState = await loadQuestionBankCacheState()
+          if (cancelled || finished) return
           setLocalCacheTotal(latestState.questionCount)
           setLocalSyncedPages(latestState.syncedPageCount)
           if (!areCacheStatesEqual(previousCacheState, latestState)) {
             previousCacheState = latestState
-            stableRounds = 0
             const previewRows = await loadCachedQuestionBankPreview(INITIAL_CACHE_PREVIEW_ROWS)
-            if (!cancelled && previewRows.length > 0) {
+            if (!cancelled && !finished && previewRows.length > 0) {
               setRows(previewRows)
             }
-          } else {
-            stableRounds += 1
           }
         } catch {
-          stableRounds += 1
+          // A temporary cache read failure must not end an ongoing download.
         }
 
-        if (stableRounds >= 2 || pollRounds >= MAX_CACHE_POLL_ROUNDS) {
-          if (!cancelled) {
-            const fullRows = await loadCachedQuestionBank().catch(() => [])
-            if (!cancelled && fullRows.length > 0) {
-              setRows(fullRows)
-            }
-            if (!cancelled) {
-              setSyncing(false)
-            }
-          }
-          return
+        if (!cancelled && !finished) {
+          timeoutId = window.setTimeout(() => {
+            void pollCache()
+          }, CACHE_POLL_DELAY_MS)
         }
-
-        timeoutId = window.setTimeout(() => {
-          void pollCache()
-        }, CACHE_POLL_DELAY_MS)
       }
 
       timeoutId = window.setTimeout(() => {
         void pollCache()
       }, CACHE_POLL_DELAY_MS)
+
+      try {
+        await triggerBackgroundCacheSync()
+      } finally {
+        // Only the download task can tell us it is done; slow pages can take
+        // longer than any fixed number of unchanged cache polls.
+        finished = true
+        if (timeoutId !== null) window.clearTimeout(timeoutId)
+        if (!cancelled) {
+          try {
+            const [latestState, fullRows] = await Promise.all([
+              loadQuestionBankCacheState(),
+              loadCachedQuestionBank(),
+            ])
+            if (!cancelled) {
+              setLocalCacheTotal(latestState.questionCount)
+              setLocalSyncedPages(latestState.syncedPageCount)
+              setRows(fullRows)
+            }
+          } finally {
+            if (!cancelled) setSyncing(false)
+          }
+        }
+      }
     }
 
     const bootstrap = async () => {
@@ -802,10 +811,7 @@ export function QuestionBankPage() {
             return
           }
 
-          setSyncing(true)
-          // 用轻量触发替代 loadQuestionPool(1)，避免读取全部 IDB 记录
-          void triggerBackgroundCacheSync().catch(() => undefined)
-          void pollCacheUntilStable(initialCacheState)
+          await syncCacheAndRefresh(initialCacheState)
           return
         }
 
@@ -833,8 +839,7 @@ export function QuestionBankPage() {
           return
         }
 
-        setSyncing(true)
-        void pollCacheUntilStable(nextCacheState)
+        await syncCacheAndRefresh(nextCacheState)
       } catch (loadError) {
         if (cancelled) return
         setLoading(false)
